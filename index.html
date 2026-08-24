@@ -1,0 +1,4223 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>商研社 · 像素釣魚挑戰</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: #7eb8d4;
+      margin: 0; padding: 0;
+      font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", system-ui, sans-serif;
+      touch-action: manipulation;
+      position: fixed; inset: 0;
+    }
+    #gameCanvas {
+      display: block; width: 100%; height: 100%;
+      position: fixed; inset: 0;
+      background: #7eb8d4;
+      image-rendering: pixelated;
+      cursor: crosshair;
+      touch-action: none;
+      z-index: 0;
+    }
+    #ui-layer, #start-screen {
+      /* keep above canvas */
+    }
+    #ui-layer {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; display: flex; flex-direction: column;
+      justify-content: space-between; padding: 10px;
+      padding-top: max(10px, env(safe-area-inset-top));
+      padding-bottom: max(10px, env(safe-area-inset-bottom));
+      z-index: 10;
+    }
+    .pixel-box {
+      background: rgba(30, 50, 70, 0.88);
+      border: 3px solid #e8d9b5;
+      box-shadow: 0 0 0 2px #1a1208;
+      color: #f0e6d0; padding: 8px 12px; font-size: 13px; line-height: 1.4;
+      pointer-events: auto; border-radius: 2px;
+    }
+    #top-bar { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    #wait-bar-wrap {
+      display: none; width: 100%; margin-top: 6px;
+      background: rgba(10,20,30,0.55); border: 2px solid #e8d9b5; height: 14px;
+      overflow: hidden; border-radius: 2px;
+    }
+    #wait-bar-wrap.show { display: block; }
+    #wait-bar {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, #3a8a5a, #7fff9a, #c0ffd0);
+      transition: width 0.15s linear, background 0.25s ease;
+    }
+    #wait-bar.ready {
+      background: linear-gradient(90deg, #c09020, #ffe080, #fff0c0);
+      box-shadow: 0 0 8px rgba(255,220,100,0.5);
+    }
+    #idle-tip {
+      position: absolute; left: 50%; bottom: 18%; transform: translateX(-50%);
+      color: rgba(255,255,230,0.75); font-size: 12px; pointer-events: none;
+      z-index: 20; text-shadow: 0 1px 2px #000; white-space: nowrap;
+      display: none;
+    }
+    #idle-tip.show { display: block; }
+    #streak-box {
+      display: none; font-size: 12px; color: #ffd780;
+    }
+    #streak-box.show { display: block; }
+    #mission-box {
+      font-size: 11px; line-height: 1.45; max-width: 100%;
+      margin-top: 6px; display: none;
+    }
+    #mission-box.show { display: block; }
+    #save-prompt {
+      position: absolute; left: 50%; bottom: 22%; transform: translateX(-50%);
+      background: rgba(80,30,20,0.95); border: 3px solid #ffb080; color: #fff0e0;
+      padding: 10px 14px; z-index: 55; display: none; text-align: center;
+      font-size: 14px; border-radius: 4px; max-width: 90%;
+      animation: pulseSave 0.6s ease infinite alternate;
+    }
+    @keyframes pulseSave {
+      from { transform: translateX(-50%) scale(1); }
+      to { transform: translateX(-50%) scale(1.04); }
+    }
+    #instruction {
+      text-align: center; max-width: 340px; margin: 0 auto 10px;
+      font-size: 13px; display: none;
+    }
+    #collection-btn { display: none; }
+    #bottom-controls {
+      align-self: flex-end;
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 6px;
+      pointer-events: auto;
+      max-width: min(100%, 420px);
+      padding: 6px 8px;
+      background: rgba(12, 24, 36, 0.55);
+      border: 2px solid rgba(232, 217, 181, 0.45);
+      border-radius: 8px;
+      backdrop-filter: blur(4px);
+    }
+    #bottom-controls .pixel-box {
+      padding: 6px 10px;
+      font-size: 12px;
+      border-width: 2px;
+      box-shadow: 0 0 0 1px #1a1208;
+      background: rgba(30, 50, 70, 0.92);
+      white-space: nowrap;
+    }
+    #bottom-controls .pixel-box:active {
+      transform: translateY(1px);
+      background: rgba(50, 80, 100, 0.95);
+    }
+    @media (orientation: portrait) {
+      #bottom-controls {
+        max-width: 100%;
+        gap: 5px;
+      }
+      #bottom-controls .pixel-box {
+        padding: 7px 11px;
+        font-size: 12px;
+      }
+    }
+    @media (orientation: landscape) {
+      #bottom-controls {
+        gap: 5px;
+      }
+      #bottom-controls .pixel-box {
+        padding: 5px 9px;
+        font-size: 11px;
+      }
+    }
+
+    #bait-btn { display: none; }
+    #bait-modal {
+      display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 20, 40, 0.88); justify-content: center; align-items: center;
+      pointer-events: auto; z-index: 100;
+    }
+    #bait-modal.show { display: flex; }
+    .bait-panel-box {
+      background: #1a3048; border: 5px solid #e8d9b5;
+      box-shadow: 0 0 0 3px #1a1208, 6px 6px 0 #0a1020;
+      max-width: 92%; width: 360px; padding: 18px; color: #f0e6d0; text-align: center;
+    }
+    .bait-panel-box h2 { font-size: 16px; margin-bottom: 8px; color: #ffd700; }
+    .bait-panel-box .bait-hint {
+      font-size: 12px; color: #b0c8d8; margin-bottom: 14px; line-height: 1.45;
+    }
+    .bait-list { display: flex; flex-direction: column; gap: 10px; }
+    .bait-card {
+      display: flex; align-items: center; gap: 12px; text-align: left;
+      padding: 10px 12px; cursor: pointer;
+      background: #2a4a68; border: 3px solid #e8d9b5; color: #f0e6d0;
+      font-family: inherit;
+    }
+    .bait-card:active { background: #3a6a88; }
+    .bait-card.active {
+      border-color: #ffd780; background: #4a3a18;
+      box-shadow: 0 0 0 2px rgba(255, 200, 80, 0.25);
+    }
+    .bait-card.zero { opacity: 0.55; }
+    .bait-card canvas {
+      image-rendering: pixelated; width: 36px; height: 36px;
+      flex-shrink: 0; background: #0a1828; border: 2px solid #3a5a70;
+    }
+    .bait-card .bait-info { flex: 1; min-width: 0; }
+    .bait-card .bait-name { font-size: 14px; color: #ffd780; margin-bottom: 2px; }
+    .bait-card .bait-desc { font-size: 11px; color: #c0d0e0; line-height: 1.35; }
+    .bait-card .bait-cnt {
+      font-size: 13px; color: #e8d9b5; flex-shrink: 0; min-width: 36px; text-align: right;
+    }
+    .bait-unequip {
+      margin-top: 12px; padding: 10px 18px; background: #2a4a68;
+      border: 3px solid #e8d9b5; color: #d0e0f0; font-family: inherit;
+      font-size: 13px; cursor: pointer; width: 100%;
+    }
+    #bait-toast {
+      position: absolute; left: 50%; top: 28%; transform: translateX(-50%);
+      background: rgba(20, 40, 30, 0.95); border: 3px solid #a0e0a0;
+      color: #e8ffe8; padding: 10px 16px; z-index: 70; display: none;
+      text-align: center; font-size: 13px; border-radius: 4px; max-width: 90%;
+      pointer-events: none;
+    }
+
+    #mute-btn { display: none; }
+    #question-modal, #result-modal, #collection-modal, #achievement-modal {
+      display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 20, 40, 0.88); justify-content: center; align-items: center;
+      pointer-events: auto; z-index: 100;
+    }
+    #question-modal.show, #result-modal.show, #collection-modal.show, #achievement-modal.show { display: flex; }
+    .modal-content, .collection-panel {
+      background: #1a3048; border: 5px solid #e8d9b5;
+      box-shadow: 0 0 0 3px #1a1208, 6px 6px 0 #0a1020;
+      max-width: 92%; width: 400px; padding: 18px; color: #f0e6d0; text-align: center;
+    }
+    .collection-panel {
+      max-height: 80vh; display: flex; flex-direction: column; width: 420px;
+    }
+    .modal-content h2, .collection-panel h2 { font-size: 16px; margin-bottom: 10px; color: #ffd700; }
+    .modal-content .q-text { font-size: 14px; margin-bottom: 14px; line-height: 1.55; }
+    .option-btn {
+      display: block; width: 100%; margin: 7px 0; padding: 12px 10px;
+      background: #2a4a68; border: 3px solid #e8d9b5; color: #f0e6d0;
+      font-family: inherit; font-size: 13px; cursor: pointer; text-align: left;
+    }
+    .option-btn:active { background: #3a6a88; }
+    .option-btn.correct { background: #1f5a2f; border-color: #7fff7f; }
+    .option-btn.wrong { background: #5a2020; border-color: #ff7f7f; }
+    .result-msg { margin-top: 10px; font-size: 13px; min-height: 22px; }
+    .close-btn, .ok-btn, .col-close {
+      margin-top: 14px; padding: 11px 24px; background: #7a4a1f;
+      border: 3px solid #e8d9b5; color: #f0e6d0; font-family: inherit;
+      font-size: 14px; cursor: pointer;
+    }
+    .collection-stats { font-size: 12px; margin-bottom: 10px; opacity: 0.9; }
+    .collection-list {
+      overflow-y: auto; flex: 1; text-align: left;
+      border: 2px solid #3a5a7a; background: #0a1828; padding: 6px; max-height: 50vh;
+    }
+    .col-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 6px; border-bottom: 1px solid #2a3a4a; font-size: 13px;
+    }
+    .col-item.locked { opacity: 0.45; }
+    .col-item .col-icon {
+      width: 52px; height: 36px; flex-shrink: 0;
+      background: #0a2030; border: 1px solid #4a5a6a;
+      image-rendering: pixelated;
+    }
+    .col-item .col-name { flex: 1; }
+    .col-item .col-tag {
+      font-size: 10px; padding: 2px 6px; background: #2a4a3a; color: #a0e0a0;
+    }
+    .col-item.locked .col-tag { background: #3a3a3a; color: #888; }
+    #loot-preview {
+      width: 80px; height: 60px; margin: 8px auto;
+      image-rendering: pixelated; background: #0a2030; border: 2px solid #e8d9b5;
+    }
+    #start-screen {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: linear-gradient(180deg, #7eb8d4 0%, #4a8ab0 100%);
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      z-index: 200; pointer-events: auto; text-align: center; padding: 16px;
+      padding-top: max(16px, env(safe-area-inset-top));
+    }
+    #start-screen h1 { font-size: 26px; color: #fff8e0; text-shadow: 3px 3px 0 #2a4a6a; margin-bottom: 6px; }
+    #start-screen .sub { font-size: 13px; color: #d0e8f8; margin-bottom: 20px; }
+    #start-btn {
+      padding: 14px 36px; background: #3a8a5a; border: 4px solid #e8d9b5;
+      color: #fff; font-family: inherit; font-size: 16px; cursor: pointer;
+      box-shadow: 4px 4px 0 #1a3a2a;
+    }
+    #start-btn:active { transform: translate(2px,2px); box-shadow: 2px 2px 0 #1a3a2a; }
+    #start-screen .hint { margin-top: 18px; font-size: 12px; color: #c0d8e8; max-width: 340px; line-height: 1.6; }
+    #tutorial-toast {
+      position: absolute; left: 50%; top: 18%; transform: translateX(-50%);
+      background: rgba(20,40,60,0.92); border: 3px solid #e8d9b5; color: #f0e6d0;
+      padding: 12px 16px; font-size: 14px; line-height: 1.7; text-align: center;
+      pointer-events: none; z-index: 40; border-radius: 4px; max-width: 90%;
+      transition: opacity 0.5s; display: none;
+    }
+    #tutorial-toast .step { opacity: 0.95; }
+    #tutorial-toast .num { color: #ffd780; font-weight: bold; }
+    .col-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+    .col-tab {
+      font-size: 11px; padding: 4px 8px; background: #2a4a68; border: 2px solid #e8d9b5;
+      color: #d0e0f0; cursor: pointer; font-family: inherit;
+    }
+    .col-tab.active { background: #3a7a50; border-color: #a0e0a0; color: #fff; }
+    .col-progress {
+      height: 10px; background: #0a1828; border: 2px solid #3a5a7a; margin: 6px 0 10px;
+      overflow: hidden;
+    }
+    .col-progress > div { height: 100%; background: linear-gradient(90deg,#3a8a5a,#7fff7f); width: 0%; }
+    .col-rarity { font-size: 9px; padding: 1px 5px; margin-left: 4px; border-radius: 2px; }
+    .r-common { background: #3a5a4a; color: #a0d0a0; }
+    .r-rare { background: #2a4a7a; color: #8ab0ff; }
+    .r-legend { background: #6a3a1a; color: #ffd780; }
+    #share-box {
+      margin-top: 10px; font-size: 12px; color: #c0d8e8; line-height: 1.5;
+      background: #0a1828; border: 1px dashed #4a6a8a; padding: 8px; display: none;
+    }
+    #newcatch-flash {
+      position: absolute; left: 50%; top: 40%; transform: translate(-50%,-50%);
+      color: #ffe080; font-size: 18px; font-weight: bold; text-shadow: 2px 2px 0 #1a1208;
+      pointer-events: none; z-index: 45; opacity: 0; transition: opacity 0.3s;
+      text-align: center;
+    }
+    #load-hint {
+      position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+      font-size: 11px; color: #d0e8f8; opacity: 0.8; pointer-events: none;
+    }
+    #achievement-modal { z-index: 52; }
+    .ach-item {
+      display: flex; gap: 8px; align-items: flex-start; padding: 8px;
+      border-bottom: 1px solid #2a4a6a; text-align: left;
+    }
+    .ach-item.locked { opacity: 0.4; }
+    .ach-icon {
+      width: 36px; height: 36px; flex-shrink: 0;
+      image-rendering: pixelated; background: #0a2030;
+      border: 2px solid #e8d9b5; box-sizing: border-box;
+    }
+    .ach-item.locked .ach-icon { border-color: #3a4a5a; opacity: 0.85; }
+    .ach-title { font-size: 13px; color: #ffd780; }
+    .ach-desc { font-size: 11px; color: #b0c8d8; margin-top: 2px; }
+    #ach-toast {
+      position: absolute; top: 14%; left: 50%; transform: translateX(-50%);
+      background: rgba(30,50,20,0.95); border: 3px solid #c0e080; color: #f0ffe0;
+      padding: 10px 16px; z-index: 60; display: none; text-align: center;
+      font-size: 13px; max-width: 88%; border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  
+  <div id="ui-layer">
+    <div id="top-bar">
+      <div id="score-box" class="pixel-box">魚獲 0</div>
+      <div id="status-box" class="pixel-box">準備中</div>
+      <div id="time-box" class="pixel-box">白天</div>
+      <div id="streak-box" class="pixel-box">連對 ×0</div>
+      <div id="wait-bar-wrap"><div id="wait-bar"></div></div>
+      <div id="mission-box" class="pixel-box"></div>
+    </div>
+    <div id="save-prompt">⚡ 快點螢幕收線搶救！</div>
+    <div id="idle-tip">點一下拋竿 → 等「有動靜」→ 再點收竿</div>
+    <div id="bait-toast"></div>
+    <div id="instruction" class="pixel-box" style="display:none;"></div>
+    <div id="bottom-controls">
+      <button id="collection-btn" class="pixel-box" title="圖鑑">魚庫</button>
+      <button id="bait-btn" class="pixel-box" title="魚餌">魚餌</button>
+      <button id="ach-btn" class="pixel-box" style="display:none;" title="成就">成就</button>
+      <button id="mute-btn" class="pixel-box" title="音樂">音樂</button>
+      <button id="zoom-btn" class="pixel-box" style="display:none;" title="場景縮放">標準</button>
+      <button id="reset-btn" class="pixel-box" style="display:none;opacity:0.75;" title="清除存檔">清除</button>
+    </div>
+  </div>
+  <div id="tutorial-toast">
+    <div class="step"><span class="num">1</span> 點一下拋竿</div>
+    <div class="step"><span class="num">2</span> 等「有動靜」</div>
+    <div class="step"><span class="num">3</span> 再點一下收竿</div>
+  </div>
+  <div id="newcatch-flash">✨ 新圖鑑！</div>
+
+  <div id="result-modal">
+    <div class="modal-content">
+      <h2 id="result-title">釣到了！</h2>
+      <canvas id="loot-preview" width="80" height="60"></canvas>
+      <div class="q-text" id="loot-desc"></div>
+      <button class="ok-btn" id="ok-btn">繼續釣魚</button>
+    </div>
+  </div>
+
+  <div id="question-modal">
+    <div class="modal-content">
+      <h2>釣到問題魚！</h2>
+      <div class="q-text" id="q-text"></div>
+      <div id="options"></div>
+      <div class="result-msg" id="result-msg"></div>
+      <button class="close-btn" id="close-btn" style="display:none;">繼續釣魚</button>
+    </div>
+  </div>
+
+  <div id="ach-toast"></div>
+  <div id="achievement-modal">
+    <div class="collection-panel">
+      <h2>成就列表</h2>
+      <div class="collection-stats" id="ach-stats">0 / 36</div>
+      <div class="collection-list" id="ach-list"></div>
+      <button class="col-close" id="ach-close-btn">關閉</button>
+    </div>
+  </div>
+  <div id="collection-modal">
+    <div class="collection-panel">
+      <h2>魚庫圖鑑</h2>
+      <div class="collection-stats" id="collection-stats">已發現 0 / 0</div>
+      <div class="col-progress"><div id="col-progress-bar"></div></div>
+      <div class="col-tabs" id="col-tabs">
+        <button class="col-tab active" data-filter="all">全部</button>
+        <button class="col-tab" data-filter="trash">垃圾</button>
+        <button class="col-tab" data-filter="small">小魚</button>
+        <button class="col-tab" data-filter="big">大魚</button>
+        <button class="col-tab" data-filter="turtle">烏龜</button>
+        <button class="col-tab" data-filter="huge">超大型</button>
+        <button class="col-tab" data-filter="legend">傳說</button>
+      </div>
+      <div class="collection-list" id="collection-list"></div>
+      <div id="share-box"></div>
+      <button class="col-close" id="col-close-btn">關閉</button>
+    </div>
+  </div>
+
+  <div id="bait-modal">
+    <div class="bait-panel-box">
+      <h2>像素魚餌</h2>
+      <div class="bait-hint">點選要使用的魚餌（下次拋竿消耗 1 枚）<br>再點同一項可取消裝備</div>
+      <div class="bait-list" id="bait-list"></div>
+      <button class="bait-unequip" id="bait-unequip-btn">不使用魚餌</button>
+      <button class="col-close" id="bait-close-btn" style="margin-top:10px;">關閉</button>
+    </div>
+  </div>
+
+  <div id="start-screen">
+    <h1>商研社</h1>
+    <div class="sub">COZY PIXEL FISHING</div>
+    <button id="start-btn">開始釣魚挑戰</button>
+    <div class="hint">點一下拋竿 → 等水花 → 自動收線<br>圖鑑收集 · 商研社課題 · 存檔保留</div>
+    <div id="load-hint">載入完成 · 點開始即可</div>
+  </div>
+
+  <script>
+    const FRESHWATER_FISH = [
+      // —— 小魚 ——
+      { name: "鯽魚", size: "small", color: "#c9a227", fin: "#a07a10", desc: "常見的小鯽魚，體型圓潤。" },
+      { name: "溪哥", size: "small", color: "#5b9bd5", fin: "#3a7ab5", desc: "台灣溪流常見的粗首鱲。" },
+      { name: "泥鰍", size: "small", color: "#8b7355", fin: "#6b5335", desc: "滑溜溜的泥鰍，喜歡鑽泥。" },
+      { name: "馬口魚", size: "small", color: "#70c0a0", fin: "#50a080", desc: "台灣特有溪流魚。" },
+      { name: "苦花", size: "small", color: "#e8c44a", fin: "#c8a42a", desc: "台灣中上游代表性魚種。" },
+      { name: "石賓", size: "small", color: "#7a9e7a", fin: "#5a7e5a", desc: "台灣特有種，喜歡清澈溪流。" },
+      { name: "蝦虎", size: "small", color: "#b08d57", fin: "#907d47", desc: "底棲的小蝦虎魚。" },
+      { name: "鬥魚", size: "small", color: "#e74c6a", fin: "#c73c5a", desc: "色彩鮮豔的野生鬥魚。" },
+      { name: "孔雀魚", size: "small", color: "#9b59b6", fin: "#7b3996", desc: "尾鰭華麗的小魚。" },
+      { name: "燈魚", size: "small", color: "#3498db", fin: "#1a78bb", desc: "成群的小燈魚。" },
+      { name: "青鱂", size: "small", color: "#1abc9c", fin: "#0a9c7c", desc: "水面活動的小型魚。" },
+      { name: "細鯽", size: "small", color: "#f39c12", fin: "#d37c00", desc: "細長的小型鯉科魚。" },
+      { name: "沙鰍", size: "small", color: "#d2b48c", fin: "#b2946c", desc: "喜歡沙底的小型鰍類。" },
+      { name: "平鱲", size: "small", color: "#5dade2", fin: "#3d8dc2", desc: "溪流中層的常見魚。" },
+      { name: "紅尾鱲", size: "small", color: "#e67e22", fin: "#c65e02", desc: "尾部帶紅色的美麗小魚。" },
+      { name: "白魚", size: "small", color: "#ecf0f1", fin: "#bdc3c7", desc: "銀白色的小型淡水魚。" },
+      { name: "麥穗魚", size: "small", color: "#a3e4d7", fin: "#76d7c4", desc: "體型很小的雜食性魚。" },
+      { name: "棒花魚", size: "small", color: "#d5a6a0", fin: "#b58680", desc: "底棲的小型鯉科魚。" },
+      { name: "花鱭", size: "small", color: "#f5b7b1", fin: "#d59791", desc: "體側有花紋的小魚。" },
+      { name: "黃顙魚", size: "small", color: "#f4d03f", fin: "#d4b01f", desc: "小型鯰類，有硬刺。" },
+      { name: "三角鮈", size: "small", color: "#8e9a6a", fin: "#6e7a4a", desc: "口部特別的小型鯉科魚。" },
+      { name: "唇鱲", size: "small", color: "#6ab0c8", fin: "#4a90a8", desc: "唇部發達的溪流魚。" },
+      { name: "高身鯽", size: "small", color: "#c8b050", fin: "#a89030", desc: "體高較高的小型鯽類。" },
+      { name: "羅漢魚幼體", size: "small", color: "#e07050", fin: "#c05030", desc: "頭大身短的可愛小魚。" },
+      { name: "日光燈", size: "small", color: "#40d0e0", fin: "#20b0c0", desc: "體側有明亮縱帶。" },
+      { name: "紅蓮燈", size: "small", color: "#e05070", fin: "#c03050", desc: "腹部與尾柄帶紅色。" },
+      { name: "黑裙魚", size: "small", color: "#4a4a5a", fin: "#2a2a3a", desc: "尾鰭如黑色短裙。" },
+      { name: "珍珠馬甲", size: "small", color: "#c8c0d0", fin: "#a8a0b0", desc: "鱗片帶珍珠光澤。" },
+      { name: "斑馬魚", size: "small", color: "#e8e8e0", fin: "#3a3a3a", desc: "身上有明顯橫紋。" },
+      { name: "清道夫幼魚", size: "small", color: "#6a5a4a", fin: "#4a3a2a", desc: "吸盤嘴的小型清道夫。" },
+      { name: "娃娃魚蝌蚪", size: "small", color: "#5a7a50", fin: "#3a5a30", desc: "其實不是魚，但常被誤釣。" },
+      { name: "石鮒", size: "small", color: "#9a8a60", fin: "#7a6a40", desc: "貼近石縫活動的小魚。" },
+      { name: "寬鰭鱲", size: "small", color: "#50b0a0", fin: "#309080", desc: "鰭較寬的溪流魚。" },
+      { name: "台灣石鮒", size: "small", color: "#a09070", fin: "#807050", desc: "台灣特有的小型底棲魚。" },
+      { name: "小鯉", size: "small", color: "#d09050", fin: "#b07030", desc: "尚未長大的幼鯉。" },
+      { name: "銀鮈", size: "small", color: "#c0d0d8", fin: "#a0b0b8", desc: "銀亮體色的小型鯉科。" },
+      { name: "長臀鮠", size: "small", color: "#8a7a60", fin: "#6a5a40", desc: "臀鰭特別長的小型鯰。" },
+      { name: "刺鰍", size: "small", color: "#7a6a50", fin: "#5a4a30", desc: "身體細長有刺的鰍類。" },
+      { name: "花鰍", size: "small", color: "#c0a878", fin: "#a08858", desc: "體表有斑紋的泥鰍近親。" },
+      { name: "金魚", size: "small", color: "#e05030", fin: "#c03010", desc: "被人放生的觀賞金魚。" },
+      { name: "鳳凰魚", size: "small", color: "#e8a020", fin: "#c88000", desc: "尾鰭展開如鳳凰。" },
+      { name: "月光魚", size: "small", color: "#d0c878", fin: "#b0a858", desc: "體色柔和的胎生小魚。" },
+      { name: "摩利魚", size: "small", color: "#5a6a7a", fin: "#3a4a5a", desc: "常被用來清藻的小魚。" },
+      { name: "神仙魚幼體", size: "small", color: "#e8e0d0", fin: "#4a6a9a", desc: "側扁高體的小型神仙魚。" },
+      { name: "七彩神仙幼體", size: "small", color: "#e070a0", fin: "#c05080", desc: "色彩豐富的幼體。" },
+      { name: "孔雀鱸幼體", size: "small", color: "#50a070", fin: "#308050", desc: "尚未長大的兇猛小魚。" },
+      { name: "泰國鬥魚", size: "small", color: "#b03090", fin: "#901070", desc: "長尾華麗的鬥魚。" },
+      { name: "中國鬥魚", size: "small", color: "#c04050", fin: "#a02030", desc: "原生種鬥魚，較為低調。" },
+      { name: "食蚊魚", size: "small", color: "#90b090", fin: "#709070", desc: "以蚊子幼蟲為食的小魚。" },
+      { name: "大肚魚", size: "small", color: "#a0b888", fin: "#809868", desc: "腹部圓潤的常見小魚。" },
+      // —— 大魚 ——
+      { name: "鯉魚", size: "big", color: "#e67e22", fin: "#c65e02", desc: "經典的淡水鯉魚，體型壯碩。" },
+      { name: "草魚", size: "big", color: "#58d68d", fin: "#38b66d", desc: "四大家魚之一，以水草為食。" },
+      { name: "鰱魚", size: "big", color: "#85c1e9", fin: "#65a1c9", desc: "濾食性的大魚。" },
+      { name: "鱅魚", size: "big", color: "#5dade2", fin: "#3d8dc2", desc: "大頭鰱，體型巨大。" },
+      { name: "青魚", size: "big", color: "#1e8449", fin: "#0e6429", desc: "喜歡吃螺螄的大型魚。" },
+      { name: "吳郭魚", size: "big", color: "#d4ac0d", fin: "#b48c00", desc: "台灣最常見的養殖淡水魚。" },
+      { name: "鯰魚", size: "big", color: "#7d6608", fin: "#5d4600", desc: "大嘴鯰魚，夜間活動。" },
+      { name: "鱸魚", size: "big", color: "#1a5276", fin: "#0a3255", desc: "兇猛的淡水鱸魚。" },
+      { name: "鰻魚", size: "big", color: "#566573", fin: "#364553", desc: "細長的鰻魚，力道很強。" },
+      { name: "鱘魚", size: "big", color: "#5d6d7e", fin: "#3d4d5e", desc: "古老的大型淡水魚（稀有）。" },
+      { name: "黑鯛", size: "big", color: "#3a4a5a", fin: "#2a3a4a", desc: "河口常見的強壯魚種。" },
+      { name: "嘉鱲", size: "big", color: "#c0a060", fin: "#a08040", desc: "肉質細嫩的淡水魚。" },
+      { name: "福壽魚王", size: "big", color: "#c09020", fin: "#a07000", desc: "特別肥大的吳郭魚。" },
+      { name: "大口黑鱸", size: "big", color: "#3a5a3a", fin: "#2a4a2a", desc: "外來種，獵食能力強。" },
+      { name: "紅目鰱", size: "big", color: "#d08070", fin: "#b06050", desc: "眼睛帶紅色的鰱類。" },
+      { name: "白鰱", size: "big", color: "#d0e0e8", fin: "#b0c0c8", desc: "銀白體色的濾食魚。" },
+      { name: "烏鰡", size: "big", color: "#4a5a4a", fin: "#2a3a2a", desc: "台灣溪流中大型魚之一。" },
+      { name: "鯇魚", size: "big", color: "#60a070", fin: "#408050", desc: "草魚的另一稱呼，體型大。" },
+      { name: "塘虱", size: "big", color: "#5a4a3a", fin: "#3a2a1a", desc: "鬍子鯰，夜間出沒。" },
+      { name: "生魚", size: "big", color: "#4a6a50", fin: "#2a4a30", desc: "兇猛的烏魚近親，會換氣。" },
+      { name: "虹鱒", size: "big", color: "#d07080", fin: "#40a070", desc: "冷水域的美麗鱒魚。" },
+      { name: "櫻花鉤吻鮭", size: "big", color: "#e8a0b0", fin: "#50a080", desc: "台灣國寶魚（極稀有）。" },
+      { name: "香魚", size: "big", color: "#90c0a0", fin: "#70a080", desc: "有特殊香氣的溪流魚。" },
+      { name: "鯉魚白子", size: "big", color: "#e0d0b0", fin: "#c0b090", desc: "體色偏白的鯉魚變種。" },
+      { name: "錦鯉", size: "big", color: "#e04040", fin: "#e8e0d0", desc: "被放生的華麗錦鯉。" },
+      // —— 以上 FRESHWATER 共 75（50小+25大） ——
+    ];
+
+    const HUGE_FISH = [
+      { name: "巨骨舌魚", size: "huge", color: "#6b8f5e", fin: "#4a6f3e", desc: "亞馬遜巨魚，體長可超過兩公尺，水面影子驚人。" },
+      { name: "巨型鯰魚", size: "huge", color: "#5c4a32", fin: "#3c2a1a", desc: "底棲巨獸，觸鬚與寬口讓人背脊發涼。" },
+      { name: "皇鱘", size: "huge", color: "#6a7a88", fin: "#4a5a68", desc: "活化石級巨鱘，甲冑般的骨板閃著灰光。" },
+      { name: "巨型鯉王", size: "huge", color: "#c07830", fin: "#a05818", desc: "傳說中的湖中鯉王，一甩尾就能掀起大浪。" },
+      { name: "電鰻巨獸", size: "huge", color: "#3a4a55", fin: "#2a3a45", desc: "細長而有力的巨型電鰻，影子在水下扭動。" },
+      { name: "淡水魟", size: "huge", color: "#5a4a6a", fin: "#3a2a4a", desc: "扁平巨盤游過，水面出現圓形巨大陰影。" },
+      { name: "巨鱘龍", size: "huge", color: "#708090", fin: "#506070", desc: "披著骨板的遠古巨魚。" },
+      { name: "巨型草魚", size: "huge", color: "#3a8a50", fin: "#1a6a30", desc: "幾乎有小船那麼長的草魚。" },
+      { name: "湖怪鯰", size: "huge", color: "#4a3a28", fin: "#2a1a10", desc: "據說能吞下整隻鴨子。" },
+      { name: "銀龍魚", size: "huge", color: "#c0c8d0", fin: "#a0a8b0", desc: "鱗片如鏡的大型龍魚。" },
+      { name: "紅龍魚", size: "huge", color: "#c04030", fin: "#a02010", desc: "稀有的紅色大型龍魚。" },
+      { name: "巨羅非", size: "huge", color: "#b09020", fin: "#907000", desc: "誇張體型的吳郭魚近親。" }
+    ];
+
+    // 烏龜：小／大，逼真像素側視
+    const TURTLES = [
+      { name: "巴西紅耳龜", size: "small", shell: "#2a6a3a", scute: "#1a4a2a", skin: "#5a8a4a", belly: "#c8b070", accent: "#e05030", desc: "耳後有紅色斑塊的常見寵物龜。" },
+      { name: "斑龜", size: "small", shell: "#3a4a2a", scute: "#2a3a1a", skin: "#6a7a4a", belly: "#d0c090", accent: "#c0a060", desc: "台灣常見的小型淡水龜。" },
+      { name: "麝香龜", size: "small", shell: "#4a3a28", scute: "#2a1a10", skin: "#6a5a40", belly: "#b0a070", accent: "#8a7050", desc: "體型嬌小，有獨特氣味。" },
+      { name: "地圖龜幼體", size: "small", shell: "#3a5a3a", scute: "#2a4a2a", skin: "#70a050", belly: "#d8c888", accent: "#f0e0a0", desc: "背甲有地圖般紋路的小龜。" },
+      { name: "金錢龜幼體", size: "small", shell: "#3a5a28", scute: "#c0a030", skin: "#5a7a3a", belly: "#e0d0a0", accent: "#e8c040", desc: "背甲帶金色圓斑的珍稀小龜。" },
+      { name: "巴西龜幼體", size: "small", shell: "#2a5a32", scute: "#1a3a22", skin: "#4a8a3a", belly: "#d0c080", accent: "#d04030", desc: "剛孵化不久的小巴西龜。" },
+      { name: "平胸龜", size: "small", shell: "#5a4a30", scute: "#3a2a18", skin: "#7a6a48", belly: "#c8b888", accent: "#a08050", desc: "背甲平坦，善於攀爬。" },
+      { name: "黃頭側頸龜", size: "small", shell: "#3a5a40", scute: "#2a4a30", skin: "#8a9a40", belly: "#d8d0a0", accent: "#e0c040", desc: "頭部偏黃，側向伸頸。" },
+      { name: "草龜", size: "big", shell: "#2a4a28", scute: "#1a3a18", skin: "#4a6a38", belly: "#c0b070", accent: "#6a8a40", desc: "中大型草龜，背甲厚實。" },
+      { name: "中華鱉", size: "big", shell: "#5a6a40", scute: "#3a4a28", skin: "#8a9a60", belly: "#d0c8a0", accent: "#6a7a50", desc: "軟殼鱉，脖子極長，力道驚人。" },
+      { name: "鱷龜", size: "big", shell: "#3a3a28", scute: "#2a2a18", skin: "#5a5a38", belly: "#a09870", accent: "#4a4a30", desc: "背甲崎嶇如岩石，咬合力極強。" },
+      { name: "蛇頸龜", size: "big", shell: "#2a4a3a", scute: "#1a3a2a", skin: "#4a7a5a", belly: "#c8d0a8", accent: "#3a6a4a", desc: "長頸如蛇，側頸科代表。" },
+      { name: "食蛇龜", size: "big", shell: "#3a5a30", scute: "#c8a830", skin: "#5a7a40", belly: "#e0d0a0", accent: "#e8c040", desc: "背甲金紋明顯的保育類。" },
+      { name: "大頭龜", size: "big", shell: "#4a3a28", scute: "#2a1a10", skin: "#6a5a40", belly: "#c0b080", accent: "#8a7040", desc: "頭部特別巨大的淡水龜。" },
+      { name: "豬鼻龜", size: "big", shell: "#4a5a58", scute: "#2a3a38", skin: "#6a7a78", belly: "#c0c8c0", accent: "#8a9a98", desc: "鼻子如豬，軟殼會「吐泡泡」。" },
+      { name: "巨鱷龜", size: "big", shell: "#2a2a1a", scute: "#1a1a0a", skin: "#4a4a30", belly: "#908860", accent: "#3a3a20", desc: "超大體型的鱷龜，像移動的礁岩。" }
+    ];
+
+    const TRASH_ITEMS = [
+      { name: "塑膠瓶", type: "bottle", desc: "一個被丟棄的透明塑膠瓶……請愛護河川！" },
+      { name: "破爛熊玩偶", type: "bear", desc: "一隻濕透又破破爛爛的小熊玩偶。" },
+      { name: "易開罐", type: "can", desc: "生鏽的鋁罐。" },
+      { name: "塑膠袋", type: "bag", desc: "漂浮的白色塑膠袋，纏住了魚線。" },
+      { name: "破布", type: "cloth", desc: "一塊又髒又臭的舊布。" },
+      { name: "輪胎碎片", type: "tire", desc: "一小塊輪胎橡膠。" },
+      { name: "寶特瓶蓋", type: "cap", desc: "五顏六色的瓶蓋。" },
+      { name: "廢棄口罩", type: "mask", desc: "一個濕透的口罩。" },
+      { name: "拖鞋", type: "slipper", desc: "單腳的舊拖鞋，另一腳不知去向。" },
+      { name: "釣魚線團", type: "line", desc: "纏成一團的廢棄尼龍線。" },
+      { name: "泡麵碗", type: "bowl", desc: "泡過水的保麗龍碗。" }
+    ];
+
+    const questions = [
+      { q: "本學期社課的「MECE」原則，正確意涵是？", options: ["相互獨立、完全窮盡（Mutually Exclusive, Collectively Exhaustive）", "越多資料越好、不必分類", "只分析自己有興趣的部分", "先有結論再找支持理由即可，不必結構"], answer: 0, explain: "MECE 要求分類不重疊、且涵蓋所有重要面向，是顧問式思考的基礎。" },
+      { q: "做議題樹或問題拆解時，違反 MECE 最常見的問題是？", options: ["類別彼此重疊，或漏掉關鍵區塊", "字型不夠好看", "簡報頁數太少", "沒有使用英文專有名詞"], answer: 0, explain: "重疊會造成重複計算與混亂；不窮盡則容易漏掉真正的驅動因素。" },
+      { q: "MECE 拆解「營收下滑原因」時，較佳的第一層分類是？", options: ["價格 × 數量（或客單價 × 來客數）等不重疊且窮盡的因子", "只列自己想到的三個原因", "全部歸咎景氣", "只看社群負評"], answer: 0, explain: "先用結構把問題拆乾淨，再往下鑽，才不會漏掉主因。" },
+      { q: "「費米估算」最核心的精神是什麼？", options: ["在資訊不全時，用合理假設與數量級拆解逼近答案", "一定要有精確到小數點的官方數據才能算", "只能用計算機、不能用心算", "估算結果必須與實際完全一致才有意義"], answer: 0, explain: "費米思考訓練的是結構化拆解與合理假設，而非死背公式。" },
+      { q: "費米問題例如「台灣一年用掉多少紙杯」，較佳做法是？", options: ["拆成人口×使用頻率×場景等可估計因子再相乘", "直接猜一個整數結束", "上網複製第一筆搜尋結果就當答案", "認為這種問題無法估計所以放棄"], answer: 0, explain: "把大問題拆成可估計的小假設，是費米法的標準路徑。" },
+      { q: "費米估算中，若某一步假設差了 2 倍，通常該怎麼處理？", options: ["接受數量級誤差，並標註假設敏感度", "直接放棄整題", "把所有假設都改成極端樂觀", "不需要假設，只要最終數字漂亮"], answer: 0, explain: "費米重點是數量級與方向感；關鍵假設應標明，方便敏感度檢查。" },
+      { q: "本學期簡報課強調，好的一頁簡報通常應該？", options: ["一個核心訊息，結構清楚、視覺服務內容", "把講稿全文貼上投影片", "動畫越多越專業", "字越小、資訊密度越高越好"], answer: 0, explain: "簡報是溝通工具：頁面服務「聽懂、記住」，不是文件堆疊。" },
+      { q: "簡報開場較有效的做法是？", options: ["先對齊聽眾為何該在乎，再進入分析與建議", "先自我介紹十分鐘才進主題", "直接放滿數據表格不說明", "先道歉說自己準備不足"], answer: 0, explain: "先建立「所以呢／為什麼重要」，聽眾才跟得上後續邏輯。" },
+      { q: "簡報中放圖表時，較正確的原則是？", options: ["圖表要有清楚標題與重點標示，服務你的論點", "圖表越複雜越專業", "不需要標題，讓聽眾自己解讀", "一頁塞十張圖比較有效率"], answer: 0, explain: "圖表是論證工具，不是裝飾；重點要被看見。" },
+      { q: "「競品分析」最不該只做哪件事？", options: ["只列競品名稱與官網截圖，沒有比較維度與洞察", "定義比較維度（價格、功能、客群、通路等）", "找出差異化機會與自身定位意涵", "整理競品的優勢與弱勢"], answer: 0, explain: "競品分析的價值在結構化比較與策略意涵，而非資料堆砌。" },
+      { q: "競品分析時，選定比較維度的關鍵是？", options: ["對顧客決策真正有影響的面向", "自己最方便找到資料的面向", "只比價格", "只比廣告預算"], answer: 0, explain: "維度應連結顧客價值與策略取捨，而不是資料可得性。" },
+      { q: "做「產業分析」時，常用來檢視產業結構的框架是？", options: ["波特五力或類似的結構分析框架", "只看單一公司股價K線", "只問朋友喜不喜歡這個產業", "只統計社群按讚數"], answer: 0, explain: "產業分析關注進入障礙、替代、供需議價與競爭強度等結構因素。" },
+      { q: "波特五力中，「潛在進入者威脅」高，通常代表？", options: ["進入障礙低，既有業者利潤容易被侵蝕", "產業一定會快速成長", "現有業者完全不用擔心", "顧客忠誠度必然很高"], answer: 0, explain: "進入容易→競爭加劇、利潤承壓，是產業吸引力的重要警訊。" },
+      { q: "產業分析裡，若替代品威脅上升，企業較合理的反應是？", options: ["強化自身獨特價值或重新定義產品邊界", "完全無視替代品", "只靠降價一途", "停止所有創新"], answer: 0, explain: "替代威脅要用價值創新與差異化回應，而非視而不見。" },
+      { q: "本學期的「Prime 一頁式專案」較可能強調什麼能力？", options: ["把複雜議題收斂成一頁清楚的問題、分析與建議", "寫越長的報告分數越高", "完全不需要結論", "只貼資料、不提出觀點"], answer: 0, explain: "一頁式訓練的是聚焦、結構與溝通效率，是商研實務核心技能。" },
+      { q: "Prime 一頁式建議，較完整的結構通常包含？", options: ["情境／問題 → 分析洞察 → 建議與下一步", "只有漂亮封面", "只有資料附錄", "只有競品 Logo 拼貼"], answer: 0, explain: "一頁要能獨立說完故事：為什麼、所以呢、怎麼做。" },
+      { q: "若要同時用到 MECE、費米與簡報，較合理的專案流程是？", options: ["用 MECE 拆問題 → 費米／資料驗證 → 一頁簡報說清楚建議", "先做漂亮動畫再決定主題", "先寫結論再禁止任何假設", "三者互相衝突，不能一起用"], answer: 0, explain: "結構拆解、量化逼近、清晰溝通，是同一套商業解題流程的不同步驟。" },
+      { q: "假設驅動（Hypothesis-driven）分析的第一步通常是？", options: ["提出可被驗證的初步假設，再蒐集關鍵證據", "先把所有資料撈完再看有沒有感覺", "永遠不提出假設", "假設一旦寫下就不可修改"], answer: 0, explain: "先假設再驗證，能聚焦資源、加速學習。" },
+      { q: "在社課個案討論中，提出建議時最該補上的是？", options: ["可行性、風險與所需資源／下一步", "只有理想願景、沒有落地路徑", "只批評主角不給方案", "建議越多越好、不必取捨"], answer: 0, explain: "好建議要能執行，並說清楚代價與優先順序。" },
+      { q: "「洞察」和「資料描述」的差別是？", options: ["洞察能解釋所以然並指向行動；描述只是陳述現象", "兩者完全一樣", "洞察＝把數字念出來", "描述比洞察更有價值"], answer: 0, explain: "商研要的是「所以呢」：從現象走到含義與行動。" },
+
+      { q: "做競品分析時，「對標」最該注意的是？", options: ["選真正競爭同一客群／需求的對象，而非只看品牌名氣", "只選國外大品牌", "只選自己喜歡的品牌", "不用選，把所有公司都列進去"], answer: 0, explain: "對標要對「同一戰場」，才有策略意義。" },
+      { q: "一頁式簡報裡，最不該出現的是？", options: ["沒有結論、只有資料堆疊", "清楚的建議與下一步", "一個核心訊息", "服務論點的圖表"], answer: 0, explain: "一頁式要能獨立交付「所以呢」。" },
+      { q: "費米估算中，把「台灣手搖杯年消費量」拆解，較合理的起點是？", options: ["人口結構 × 飲用習慣 × 頻率 × 單價或杯數", "直接用自己上個月喝的杯數乘以全台", "只查一家連鎖店營收", "放棄估算改猜整數"], answer: 0, explain: "用可驗證的結構因子相乘，再調整假設。" },
+      { q: "MECE 檢查清單中，哪一項代表「完全窮盡」？", options: ["重要面向都被涵蓋，沒有明顯遺漏區塊", "每一類都用英文命名", "類別數量剛好三個", "每類字數一樣多"], answer: 0, explain: "Collectively Exhaustive = 該蓋的都蓋到。" },
+      { q: "產業分析裡，供應商議價力高通常代表？", options: ["上游集中或轉換成本高，壓縮產業利潤", "一定是好產業", "顧客一定很忠誠", "不用管成本結構"], answer: 0, explain: "五力之一：強勢上游會拿走利潤。" },
+      { q: "簡報「所以呢（So what）」指的是？", options: ["資料之後要說出含義與行動意涵", "每頁都要講笑話", "把字變大", "多放公司 Logo"], answer: 0, explain: "聽眾要的是含義，不是原始數據本身。" },
+      { q: "假設驅動分析的優點是？", options: ["先聚焦可能答案，再高效驗證，避免資料海洋", "可以完全不蒐集資料", "假設不能修改", "只適合大公司"], answer: 0, explain: "用假設導引搜證，加速學習迴圈。" },
+      { q: "Prime 一頁式若時間只剩 30 秒，你應優先保留？", options: ["問題定義、關鍵洞察、明確建議", "完整文獻回顧", "十張附錄圖", "自我介紹長版"], answer: 0, explain: "時間短更要守住決策所需的最小集合。" },
+      { q: "競品的「差異化」要有效，關鍵是？", options: ["差異對目標顧客有價值且可被感知", "只在包裝上換色", "功能越多越好", "價格一定最低"], answer: 0, explain: "差異化要連結顧客價值，而非自我感覺良好。" },
+      { q: "當資料互相矛盾時，較好的做法是？", options: ["檢查口徑、來源與時間，並在簡報中標註不確定性", "選對自己有利的那筆", "全部刪掉假裝沒看到", "立刻下絕對結論"], answer: 0, explain: "商業分析要誠實處理不確定性。" },
+      { q: "「議題樹」往下拆時，每一層最好滿足？", options: ["MECE，且能回答上一層的問題", "越多枝節越好", "只能用二分法", "不要寫假設"], answer: 0, explain: "樹狀拆解是為了結構化逼近答案。" },
+      { q: "社課個案若主角資源有限，建議應強調？", options: ["取捨與優先順序，而非一次做完所有理想方案", "預算無上限的夢想清單", "只批評不做建議", "抄競品全部功能"], answer: 0, explain: "有限資源下的策略本質是取捨。" },
+      { q: "圖表標題較佳的寫法是？", options: ["直接寫出洞察，例如「來客數連續三季下滑」", "只寫「圖一」", "不寫標題", "把整段講稿當標題"], answer: 0, explain: "標題要先幫聽眾看懂重點。" },
+      { q: "波特五力比較不直接回答的是？", options: ["公司內部組織文化好不好", "潛在進入者威脅", "替代品威脅", "顧客議價力"], answer: 0, explain: "五力偏產業結構，不是內部管理診斷。" },
+      { q: "驗證費米結果時，可用的方法是？", options: ["找公開數量級資料交叉比對，並做敏感度分析", "堅持自己的第一個數字", "只問一位朋友", "數字越大越對"], answer: 0, explain: "用外部錨點與敏感度提高可信度。" },
+      { q: "簡報結尾最該留下的是？", options: ["清楚的下一步與呼叫行動", "再塞十頁附錄", "突然換主題", "只說謝謝結束"], answer: 0, explain: "好結尾把討論導向可執行決策。" },
+      { q: "做市場規模（TAM/SAM/SOM）時，SOM 通常指？", options: ["短期內實際可拿下的份額", "全世界所有相關人口", "永遠達不到的理論上限", "只含線上通路"], answer: 0, explain: "SOM 是可服務且可競爭的現實目標。" },
+      { q: "顧客旅程地圖的價值在於？", options: ["找出痛點與機會點，對齊體驗設計", "畫得越複雜越專業", "只給行銷部門看", "取代所有數據分析"], answer: 0, explain: "旅程圖是溝通與發現工具，不是裝飾。" },
+      { q: "定價策略中，成本加成定價的主要風險是？", options: ["忽略顧客願付與競爭結構", "一定會虧錢", "只能用在奢侈品", "無法計算"], answer: 0, explain: "成本只是下限參考，價值與競爭才決定價格空間。" },
+      { q: "A/B 測試要有效，關鍵前提是？", options: ["足夠樣本、單一變因、清楚成功指標", "一次改十個地方", "測一天就下結論", "不用對照組"], answer: 0, explain: "實驗設計決定結果可不可信。" },
+      { q: "商業模式畫布（BMC）最核心的一格通常是？", options: ["價值主張（為誰解決什麼問題）", "只寫公司地址", "員工人數", "辦公軟體清單"], answer: 0, explain: "價值主張是其他積木的起點。" },
+      { q: "若競品降價，你的第一反應不該是？", options: ["不經分析就全面跟進降價", "檢查自己的差異化是否仍成立", "看顧客真正在乎的屬性", "評估成本結構能否支撐"], answer: 0, explain: "跟價可能傷害品牌與利潤，先診斷再行動。" },
+      { q: "「最小可行產品（MVP）」的目的是？", options: ["用最少成本驗證關鍵假設", "一次做出完美成品", "只做介面不做功能", "避開所有顧客回饋"], answer: 0, explain: "MVP 是學習工具，不是縮水版最終產品。" },
+      { q: "寫執行摘要時應避免？", options: ["把細節全塞進去、沒有結論", "一段說清問題與建議", "標明關鍵數字", "指出風險"], answer: 0, explain: "主管先看結論與所以然，細節放後面。" },
+      { q: "通路策略選擇時，最該對齊的是？", options: ["目標客群的購買習慣與場景", "只選最便宜通路", "全部通路都做", "只做線上"], answer: 0, explain: "通路服務顧客行為，不是內部方便。" },
+      { q: "單位經濟模型裡，LTV 明顯小於 CAC 代表？", options: ["獲客不划算，模式需調整", "生意一定很好", "可以無限擴張", "不用管行銷"], answer: 0, explain: "LTV/CAC 是健康度指標，長期應明顯大於 1。" },
+      { q: "簡報中使用對比色的主要目的是？", options: ["引導視線、凸顯重點", "讓每頁都五顏六色", "炫耀設計能力", "減少文字"], answer: 0, explain: "色彩是層次與焦點工具。" },
+      { q: "做利害關係人分析時，權力高且利益高的對象應？", options: ["重點管理、密切溝通", "完全忽略", "只寄一份年報", "避免接觸"], answer: 0, explain: "關鍵利害關係人需要主動經營。" },
+      { q: "「錨定效應」在談判中常見於？", options: ["先提出的數字會影響後續判斷區間", "完全不影響決策", "只對小孩有效", "只能用在拍賣"], answer: 0, explain: "第一個數字會拉動認知範圍。" },
+
+    ];
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const lootCanvas = document.getElementById('loot-preview');
+    const lootCtx = lootCanvas.getContext('2d');
+    let W = 0, H = 0, scale = 1;
+    // 邏輯場景固定 16:9；畫面用 cover／直向偏下對齊達成全螢幕
+    const IW = 400, IH = 225;
+    let viewOX = 0, viewOY = 0, isPortrait = false;
+
+
+    // ========== Minecraft-like fishing audio (Web Audio, no external files) ==========
+    const AudioSys = {
+      ctx: null,
+      bgmNodes: null,
+      bgmOn: true,
+      sfxOn: true,
+      master: null,
+      ensure() {
+        if (this.ctx) return;
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        this.ctx = new AC();
+        this.master = this.ctx.createGain();
+        this.master.gain.value = 0.85;
+        this.master.connect(this.ctx.destination);
+      },
+      resume() {
+        this.ensure();
+        if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+      },
+      // soft noise buffer
+      noiseBuf(sec) {
+        const sr = this.ctx.sampleRate;
+        const n = Math.floor(sr * sec);
+        const buf = this.ctx.createBuffer(1, n, sr);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+        return buf;
+      },
+      // cast whoosh (Minecraft-like rod swing)
+      cast() {
+        if (!this.sfxOn) return;
+        this.resume();
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        const src = this.ctx.createBufferSource();
+        src.buffer = this.noiseBuf(0.35);
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.setValueAtTime(800, t);
+        bp.frequency.exponentialRampToValueAtTime(200, t + 0.3);
+        bp.Q.value = 0.8;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.75, t + 0.04);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+        src.connect(bp); bp.connect(g); g.connect(this.master);
+        src.start(t); src.stop(t + 0.35);
+        // soft tone
+        const o = this.ctx.createOscillator();
+        o.type = 'triangle';
+        o.frequency.setValueAtTime(220, t);
+        o.frequency.exponentialRampToValueAtTime(90, t + 0.25);
+        const og = this.ctx.createGain();
+        og.gain.setValueAtTime(0.16, t);
+        og.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+        o.connect(og); og.connect(this.master);
+        o.start(t); o.stop(t + 0.26);
+      },
+      // bobber splash / plop
+      splash(big) {
+        if (!this.sfxOn) return;
+        this.resume();
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        const src = this.ctx.createBufferSource();
+        src.buffer = this.noiseBuf(big ? 0.5 : 0.28);
+        const lp = this.ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.setValueAtTime(big ? 900 : 1400, t);
+        lp.frequency.exponentialRampToValueAtTime(180, t + (big ? 0.4 : 0.22));
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(big ? 0.9 : 0.55, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + (big ? 0.45 : 0.25));
+        src.connect(lp); lp.connect(g); g.connect(this.master);
+        src.start(t); src.stop(t + (big ? 0.5 : 0.28));
+        // bubble-ish blip
+        const o = this.ctx.createOscillator();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(big ? 140 : 280, t);
+        o.frequency.exponentialRampToValueAtTime(60, t + 0.15);
+        const og = this.ctx.createGain();
+        og.gain.setValueAtTime(0.22, t);
+        og.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+        o.connect(og); og.connect(this.master);
+        o.start(t); o.stop(t + 0.2);
+      },
+      // subtle water lap while waiting (occasional)
+      waterLap() {
+        if (!this.sfxOn) return;
+        this.resume();
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        const src = this.ctx.createBufferSource();
+        src.buffer = this.noiseBuf(0.2);
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'lowpass'; bp.frequency.value = 600;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.08, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+        src.connect(bp); bp.connect(g); g.connect(this.master);
+        src.start(t); src.stop(t + 0.2);
+      },
+      // reel / catch tug
+      reel() {
+        if (!this.sfxOn) return;
+        this.resume();
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        for (let i = 0; i < 5; i++) {
+          const o = this.ctx.createOscillator();
+          o.type = 'square';
+          o.frequency.value = 180 + i * 40 + Math.random() * 30;
+          const g = this.ctx.createGain();
+          const st = t + i * 0.05;
+          g.gain.setValueAtTime(0.0001, st);
+          g.gain.exponentialRampToValueAtTime(0.14, st + 0.01);
+          g.gain.exponentialRampToValueAtTime(0.0001, st + 0.05);
+          o.connect(g); g.connect(this.master);
+          o.start(st); o.stop(st + 0.06);
+        }
+      },
+      // catch success (Minecraft XP-ish sparkle)
+      catchOK(huge) {
+        if (!this.sfxOn) return;
+        this.resume();
+        if (!this.ctx) return;
+        this.splash(!!huge);
+        const t = this.ctx.currentTime + 0.08;
+        const notes = huge ? [523, 659, 784, 1046] : [392, 523, 659];
+        notes.forEach((f, i) => {
+          const o = this.ctx.createOscillator();
+          o.type = 'triangle';
+          o.frequency.value = f;
+          const g = this.ctx.createGain();
+          const st = t + i * 0.07;
+          g.gain.setValueAtTime(0.0001, st);
+          g.gain.exponentialRampToValueAtTime(0.22, st + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, st + 0.25);
+          o.connect(g); g.connect(this.master);
+          o.start(st); o.stop(st + 0.28);
+        });
+      },
+      // trash flop
+      trash() {
+        if (!this.sfxOn) return;
+        this.resume();
+        if (!this.ctx) return;
+        this.splash(false);
+        const t = this.ctx.currentTime + 0.05;
+        const o = this.ctx.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(160, t);
+        o.frequency.exponentialRampToValueAtTime(70, t + 0.2);
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.08, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+        o.connect(g); g.connect(this.master);
+        o.start(t); o.stop(t + 0.23);
+      },
+      // answer correct / wrong
+      correct() {
+        if (!this.sfxOn) return;
+        this.resume();
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        [523, 659, 784].forEach((f, i) => {
+          const o = this.ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+          const g = this.ctx.createGain();
+          const st = t + i * 0.08;
+          g.gain.setValueAtTime(0.1, st); g.gain.exponentialRampToValueAtTime(0.001, st + 0.2);
+          o.connect(g); g.connect(this.master); o.start(st); o.stop(st + 0.22);
+        });
+      },
+      wrong() {
+        if (!this.sfxOn) return;
+        this.resume();
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        const o = this.ctx.createOscillator(); o.type = 'sawtooth';
+        o.frequency.setValueAtTime(200, t); o.frequency.exponentialRampToValueAtTime(90, t + 0.25);
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.1, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+        o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.3);
+      },
+      // thunder clap (noise + low rumble)
+      thunder() {
+        if (!this.sfxOn) return;
+        this.resume();
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        // crack: band-passed noise burst
+        const src = this.ctx.createBufferSource();
+        src.buffer = this.noiseBuf(0.9);
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.setValueAtTime(600, t);
+        bp.frequency.exponentialRampToValueAtTime(120, t + 0.5);
+        bp.Q.value = 0.6;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.85, t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.25, t + 0.2);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.85);
+        src.connect(bp); bp.connect(g); g.connect(this.master);
+        src.start(t); src.stop(t + 0.9);
+        // low rumble
+        const o = this.ctx.createOscillator();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(55, t);
+        o.frequency.exponentialRampToValueAtTime(28, t + 1.2);
+        const og = this.ctx.createGain();
+        og.gain.setValueAtTime(0.0001, t);
+        og.gain.exponentialRampToValueAtTime(0.45, t + 0.05);
+        og.gain.exponentialRampToValueAtTime(0.0001, t + 1.3);
+        o.connect(og); og.connect(this.master);
+        o.start(t); o.stop(t + 1.35);
+        // second delayed crack (echo)
+        const src2 = this.ctx.createBufferSource();
+        src2.buffer = this.noiseBuf(0.5);
+        const lp = this.ctx.createBiquadFilter();
+        lp.type = 'lowpass'; lp.frequency.value = 400;
+        const g2 = this.ctx.createGain();
+        const t2 = t + 0.28;
+        g2.gain.setValueAtTime(0.0001, t2);
+        g2.gain.exponentialRampToValueAtTime(0.35, t2 + 0.03);
+        g2.gain.exponentialRampToValueAtTime(0.0001, t2 + 0.45);
+        src2.connect(lp); lp.connect(g2); g2.connect(this.master);
+        src2.start(t2); src2.stop(t2 + 0.5);
+      },
+      rainNodes: null,
+      startRain(heavy) {
+        if (!this.sfxOn) return;
+        this.resume();
+        if (!this.ctx) return;
+        this.stopRain();
+        const t = this.ctx.currentTime;
+        // looping filtered noise as rain
+        const buf = this.noiseBuf(2.0);
+        const src = this.ctx.createBufferSource();
+        src.buffer = buf;
+        src.loop = true;
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = heavy ? 1200 : 900;
+        bp.Q.value = 0.5;
+        const hp = this.ctx.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.value = 400;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(heavy ? 0.28 : 0.16, t + 1.2);
+        src.connect(hp); hp.connect(bp); bp.connect(g); g.connect(this.master);
+        src.start(t);
+        this.rainNodes = { src, g, heavy: !!heavy };
+      },
+      setRainIntensity(heavy) {
+        if (!this.rainNodes || !this.ctx) return;
+        const t = this.ctx.currentTime;
+        this.rainNodes.g.gain.linearRampToValueAtTime(heavy ? 0.28 : 0.16, t + 0.4);
+        this.rainNodes.heavy = !!heavy;
+      },
+      stopRain() {
+        if (!this.rainNodes) return;
+        try {
+          const t = this.ctx ? this.ctx.currentTime : 0;
+          this.rainNodes.g.gain.linearRampToValueAtTime(0.0001, t + 0.8);
+          const src = this.rainNodes.src;
+          setTimeout(() => { try { src.stop(); } catch(e) {} }, 900);
+        } catch (e) {}
+        this.rainNodes = null;
+      },
+      // peaceful Minecraft-ish loop (soft arpeggio + pad)
+      startBgm() {
+        if (!this.bgmOn) return;
+        this.resume();
+        if (!this.ctx || this.bgmNodes) return;
+        const t0 = this.ctx.currentTime;
+        const bgmGain = this.ctx.createGain();
+        bgmGain.gain.value = 0.16;
+        bgmGain.connect(this.master);
+        // gentle pad
+        const pad = this.ctx.createOscillator();
+        pad.type = 'sine';
+        pad.frequency.value = 110;
+        const padG = this.ctx.createGain();
+        padG.gain.value = 0.35;
+        pad.connect(padG); padG.connect(bgmGain);
+        pad.start(t0);
+        // arpeggio notes (C major peaceful)
+        const seq = [262, 330, 392, 523, 392, 330, 294, 247];
+        const oscs = [];
+        const interval = 0.55;
+        // schedule repeating with ScriptProcessor-like using recursive timeouts is fragile;
+        // use looping buffer of soft tones instead
+        const sr = this.ctx.sampleRate;
+        const loopSec = seq.length * interval;
+        const buf = this.ctx.createBuffer(1, Math.floor(sr * loopSec), sr);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < data.length; i++) {
+          const time = i / sr;
+          const idx = Math.floor(time / interval) % seq.length;
+          const local = time - idx * interval;
+          const freq = seq[idx];
+          const env = Math.exp(-local * 3.5) * (local < 0.02 ? local / 0.02 : 1);
+          // soft triangle-ish
+          const phase = 2 * Math.PI * freq * time;
+          const tri = 2 * Math.abs(2 * ((freq * time) % 1) - 1) - 1;
+          data[i] = tri * env * 0.22 + Math.sin(2 * Math.PI * 110 * time) * 0.04;
+        }
+        const src = this.ctx.createBufferSource();
+        src.buffer = buf;
+        src.loop = true;
+        const filt = this.ctx.createBiquadFilter();
+        filt.type = 'lowpass'; filt.frequency.value = 1800;
+        src.connect(filt); filt.connect(bgmGain);
+        src.start(t0);
+        this.bgmNodes = { pad, src, bgmGain };
+      },
+      stopBgm() {
+        if (!this.bgmNodes) return;
+        try { this.bgmNodes.pad.stop(); } catch(e) {}
+        try { this.bgmNodes.src.stop(); } catch(e) {}
+        this.bgmNodes = null;
+      },
+      toggleBgm() {
+        this.bgmOn = !this.bgmOn;
+        if (this.bgmOn) this.startBgm(); else this.stopBgm();
+        return this.bgmOn;
+      }
+    };
+
+    let gameStarted = false;
+    let state = 'idle';
+    let waitTime = 0, waitElapsed = 0;
+    let castProgress = 0, pullProgress = 0;
+    let pullDurationMs = 1100;
+    let pullFxTimer = 0;
+    let bobberPhase = 0;
+    let dayTime = 0.35;
+    let daySpeed = 0.0000038;
+    let lastTime = 0;
+    let fishCaught = 0;
+    let answered = new Set();
+    const SAVE_KEY = 'shangyan_fishing_save_v1';
+    function loadGameSave() {
+      try {
+        const raw = localStorage.getItem(SAVE_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (typeof data.fishCaught === 'number') fishCaught = data.fishCaught;
+        if (Array.isArray(data.answered)) answered = new Set(data.answered);
+      } catch (e) {}
+    }
+    function saveGameSave() {
+      try {
+        localStorage.setItem(SAVE_KEY, JSON.stringify({
+          fishCaught: fishCaught,
+          answered: Array.from(answered),
+          savedAt: Date.now()
+        }));
+      } catch (e) {}
+    }
+    loadGameSave();
+    let currentQ = null;
+    let showingResult = false;
+    let currentLoot = null;
+    let nearFish = false;
+    let pendingLoot = null;
+    let nearWindow = 4500;
+    let colFilter = 'all';
+    let tutorialShown = false;
+    let sceneZoom = 1.0; // 1.0 標準 / 1.25 放大
+    let perfScale = 1; // 1 正常，0.5 降載
+    let quizStreak = 0;
+    let escapeSaveActive = false;
+    let biteReady = false;
+    let biteTimer = 0;
+    let pendingBiteMs = 5000;
+    let escapeSaveTimer = null;
+    let missionState = { trash: 0, quizOk: 0, big: 0, date: '' };
+    try {
+      const ms = JSON.parse(localStorage.getItem('shangyan_mission_v1') || 'null');
+      if (ms) missionState = Object.assign(missionState, ms);
+    } catch(e) {}
+    function todayStr() {
+      const d = new Date();
+      return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+    }
+    function ensureMissionDay() {
+      const t = todayStr();
+      if (missionState.date !== t) {
+        missionState = { trash: 0, quizOk: 0, big: 0, date: t };
+        try { localStorage.setItem('shangyan_mission_v1', JSON.stringify(missionState)); } catch(e) {}
+      }
+    }
+    function saveMission() {
+      try { localStorage.setItem('shangyan_mission_v1', JSON.stringify(missionState)); } catch(e) {}
+    }
+    function drawMissionCheck(c, done) {
+      const p = (x,y,w,h,col) => { c.fillStyle = col; c.fillRect(x|0,y|0,Math.max(1,w|0),Math.max(1,h|0)); };
+      c.fillStyle = '#0a1828'; c.fillRect(0,0,14,14);
+      p(1,1,12,12, done ? '#2a6a3a' : '#2a3a4a');
+      p(2,2,10,10, done ? '#3a8a50' : '#1a2838');
+      if (done) {
+        p(3,7,2,2,'#c0ffc0'); p(5,9,2,2,'#c0ffc0'); p(7,7,2,2,'#e0ffe0');
+        p(9,5,2,2,'#e0ffe0'); p(11,3,2,2,'#fff');
+      } else {
+        p(3,3,8,8,'#3a4a5a'); p(4,4,6,6,'#1a2838');
+      }
+    }
+    function updateMissionUI() {
+      ensureMissionDay();
+      const el = document.getElementById('mission-box');
+      if (!el) return;
+      el.classList.add('show');
+      el.innerHTML = '';
+      const title = document.createElement('div');
+      title.textContent = '今日攤位任務';
+      title.style.marginBottom = '4px';
+      el.appendChild(title);
+      const rows = [
+        { done: missionState.trash >= 3, text: '釣到垃圾 3 件（' + Math.min(3,missionState.trash) + '/3）' },
+        { done: missionState.quizOk >= 1, text: '答對 1 題（' + Math.min(1,missionState.quizOk) + '/1）' },
+        { done: missionState.big >= 1, text: '釣到大魚 1 條（' + Math.min(1,missionState.big) + '/1）' }
+      ];
+      rows.forEach(r => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:6px;margin:3px 0;';
+        const cnv = document.createElement('canvas');
+        cnv.width = 14; cnv.height = 14;
+        cnv.style.cssText = 'image-rendering:pixelated;width:14px;height:14px;flex-shrink:0;';
+        drawMissionCheck(cnv.getContext('2d'), r.done);
+        const span = document.createElement('span');
+        span.textContent = r.text;
+        span.style.opacity = r.done ? '0.95' : '0.85';
+        row.appendChild(cnv); row.appendChild(span);
+        el.appendChild(row);
+      });
+      const allDone = missionState.trash >= 3 && missionState.quizOk >= 1 && missionState.big >= 1;
+      if (allDone) {
+        const tip = document.createElement('div');
+        tip.style.cssText = 'margin-top:4px;font-size:11px;color:#a0e0a0;';
+        tip.textContent = (window._baitRewardDate === todayStr()) ? '今日獎勵已領取' : '完成！可領魚餌獎勵';
+        el.appendChild(tip);
+      }
+      checkMissionReward();
+    }
+    function lootPoints(type, data) {
+      // 稀有度分數：垃圾0、小1、烏龜小2大5、大4、超大型8、???12、紅寶石25
+      if (type === 'trash') return 0;
+      if (type === 'turtle') return (data && data.size === 'big') ? 5 : 2;
+      if (type === 'small') return 1;
+      if (type === 'big') return 4;
+      if (type === 'huge') return 8;
+      if (type === 'nessie') return 12;
+      if (type === 'ruby') return 25;
+      return 1;
+    }
+
+    // ========== 像素魚餌 ==========
+    const BAIT_DEFS = {
+      worm: {
+        id: 'worm', name: '蟲蟲餌',
+        desc: '減少垃圾、提高小魚／烏龜機率',
+        // 效果：大幅降低 trash
+      },
+      spark: {
+        id: 'spark', name: '閃亮餌',
+        desc: '提高大魚與大龜機率',
+      },
+      myth: {
+        id: 'myth', name: '傳說餌',
+        desc: '提高超大型／???／紅寶石機率',
+      }
+    };
+    let baitInv = { worm: 0, spark: 0, myth: 0 };
+    let activeBait = null; // 'worm'|'spark'|'myth'|null
+    let missionRewarded = false;
+    try {
+      const bi = JSON.parse(localStorage.getItem('shangyan_bait_v1') || 'null');
+      if (bi) {
+        if (bi.inv) baitInv = Object.assign(baitInv, bi.inv);
+        if (bi.active) activeBait = bi.active;
+        if (bi.missionRewardedDate) {
+          /* checked against today in ensure */
+          window._baitRewardDate = bi.missionRewardedDate;
+        }
+      }
+    } catch (e) {}
+    function saveBait() {
+      try {
+        localStorage.setItem('shangyan_bait_v1', JSON.stringify({
+          inv: baitInv,
+          active: activeBait,
+          missionRewardedDate: window._baitRewardDate || ''
+        }));
+      } catch (e) {}
+    }
+    function drawBaitIcon(ctx, id, unlocked) {
+      const p = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x|0, y|0, Math.max(1,w|0), Math.max(1,h|0)); };
+      ctx.clearRect(0, 0, 18, 18);
+      ctx.fillStyle = '#0a1828';
+      ctx.fillRect(0, 0, 18, 18);
+      if (id === 'worm') {
+        // 綠色蠕蟲
+        p(3, 8, 12, 4, unlocked ? '#5a9a40' : '#3a4a3a');
+        p(4, 7, 3, 3, unlocked ? '#7aba58' : '#4a5a4a');
+        p(10, 9, 4, 3, unlocked ? '#3a7a28' : '#2a3a2a');
+        p(13, 6, 3, 3, unlocked ? '#6aaa48' : '#3a4a3a');
+        p(5, 8, 2, 2, unlocked ? '#c0e080' : '#5a6a5a');
+      } else if (id === 'spark') {
+        // 金色閃亮塊
+        p(6, 3, 6, 12, unlocked ? '#e0b040' : '#5a5030');
+        p(4, 5, 10, 8, unlocked ? '#f0c860' : '#6a6040');
+        p(7, 6, 4, 4, unlocked ? '#fff0a0' : '#7a7050');
+        p(8, 2, 2, 2, unlocked ? '#fff' : '#888');
+        p(3, 8, 2, 2, unlocked ? '#ffe080' : '#666');
+        p(13, 8, 2, 2, unlocked ? '#ffe080' : '#666');
+      } else {
+        // 傳說：紫紅星形餌
+        p(7, 2, 4, 14, unlocked ? '#8a40c0' : '#4a3a5a');
+        p(3, 6, 12, 6, unlocked ? '#a050d0' : '#5a4a6a');
+        p(5, 4, 8, 10, unlocked ? '#c070f0' : '#6a5a7a');
+        p(8, 7, 2, 2, unlocked ? '#fff' : '#888');
+        p(6, 1, 2, 2, unlocked ? '#e0a0ff' : '#555');
+        p(10, 1, 2, 2, unlocked ? '#e0a0ff' : '#555');
+      }
+    }
+    function updateBaitUI() {
+      const btn = document.getElementById('bait-btn');
+      if (btn && gameStarted) {
+        btn.style.display = 'block';
+        const total = (baitInv.worm||0) + (baitInv.spark||0) + (baitInv.myth||0);
+        if (activeBait && BAIT_DEFS[activeBait]) {
+          btn.textContent = '魚餌·' + BAIT_DEFS[activeBait].name.replace('餌','');
+        } else {
+          btn.textContent = total > 0 ? ('魚餌 ' + total) : '魚餌';
+        }
+      }
+      const list = document.getElementById('bait-list');
+      if (!list) return;
+      list.innerHTML = '';
+      ['worm', 'spark', 'myth'].forEach(id => {
+        const def = BAIT_DEFS[id];
+        const n = baitInv[id] || 0;
+        const card = document.createElement('div');
+        card.className = 'bait-card' + (activeBait === id ? ' active' : '') + (n <= 0 ? ' zero' : '');
+        card.dataset.bait = id;
+        const cnv = document.createElement('canvas');
+        cnv.width = 36; cnv.height = 36;
+        // draw at 18 then scale visually via CSS - redraw at 36
+        const ctx = cnv.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        // scale 2x from 18 design
+        ctx.save();
+        ctx.scale(2, 2);
+        drawBaitIcon(ctx, id, n > 0 || activeBait === id);
+        ctx.restore();
+        const info = document.createElement('div');
+        info.className = 'bait-info';
+        info.innerHTML = '<div class="bait-name">' + def.name + (activeBait === id ? ' · 使用中' : '') + '</div>' +
+          '<div class="bait-desc">' + def.desc + '</div>';
+        const cnt = document.createElement('div');
+        cnt.className = 'bait-cnt';
+        cnt.textContent = '×' + n;
+        card.appendChild(cnv);
+        card.appendChild(info);
+        card.appendChild(cnt);
+        card.onclick = (e) => { e.stopPropagation(); selectBait(id); };
+        list.appendChild(card);
+      });
+    }
+    function openBait() {
+      updateBaitUI();
+      document.getElementById('bait-modal').classList.add('show');
+    }
+    function closeBait() {
+      document.getElementById('bait-modal').classList.remove('show');
+    }
+    function showBaitToast(msg) {
+      const t = document.getElementById('bait-toast');
+      if (!t) return;
+      t.innerHTML = msg;
+      t.style.display = 'block';
+      clearTimeout(window._baitToastTimer);
+      window._baitToastTimer = setTimeout(() => { t.style.display = 'none'; }, 2800);
+    }
+    function grantRandomBait() {
+      // 蟲蟲餌 60% / 閃亮餌 35% / 傳說餌 5%
+      const r = Math.random();
+      const id = r < 0.60 ? 'worm' : r < 0.95 ? 'spark' : 'myth';
+      baitInv[id] = (baitInv[id] || 0) + 1;
+      saveBait();
+      updateBaitUI();
+      unlockAch('bait_1');
+      return id;
+    }
+    function checkMissionReward() {
+      ensureMissionDay();
+      const done = missionState.trash >= 3 && missionState.quizOk >= 1 && missionState.big >= 1;
+      const today = todayStr();
+      if (!done) return;
+      if (window._baitRewardDate === today) return; // 今日已領
+      window._baitRewardDate = today;
+      missionState.completed = true;
+      saveMission();
+      saveBait();
+      fishCaught += 8;
+      document.getElementById('score-box').textContent = '魚獲 ' + fishCaught;
+      saveGameSave();
+      const baitId = grantRandomBait();
+      unlockAch('mission_day');
+      const def = BAIT_DEFS[baitId];
+      showBaitToast('✅ 今日任務完成！魚獲 +8<br>🎁 獲得 <b>' + def.name + '</b> ×1');
+    }
+    function selectBait(id) {
+      if ((baitInv[id] || 0) <= 0) {
+        showBaitToast(BAIT_DEFS[id].name + ' 數量不足');
+        return;
+      }
+      if (activeBait === id) {
+        activeBait = null;
+        showBaitToast('已取消裝備魚餌');
+      } else {
+        activeBait = id;
+        showBaitToast('已裝備 <b>' + BAIT_DEFS[id].name + '</b><br>下次拋竿將消耗 1 枚');
+      }
+      saveBait();
+      updateBaitUI();
+    }
+    function consumeActiveBait() {
+      if (!activeBait) return null;
+      if ((baitInv[activeBait] || 0) <= 0) {
+        activeBait = null;
+        saveBait();
+        updateBaitUI();
+        return null;
+      }
+      const used = activeBait;
+      baitInv[used]--;
+      if (baitInv[used] <= 0) activeBait = null;
+      saveBait();
+      updateBaitUI();
+      unlockAch('bait_use');
+      return used;
+    }
+
+
+    let screenShake = 0;
+    let pullStruggle = 0;
+    // weather: 'clear' | 'rain' | 'storm'
+    let weather = 'clear';
+    let weatherTimer = 0;      // ms remaining in current weather
+    let weatherCooldown = 45000; // ms before next weather roll
+    let rainDrops = [];
+    let lightningFlash = 0;
+    let bubbles = [];
+    let cloudOffset = 0;
+    let wavePhase = 0;
+    let birdPhase = 0;
+    let heartPhase = 0;
+    // 綠色鸚鵡：perch | fly | flee | return
+    let parrot = {
+      mode: 'perch',
+      x: 108, y: 112,
+      tx: 108, ty: 112,
+      wing: 0,
+      fleeT: 0,
+      nextFly: 8000 + Math.random() * 8000
+    };
+
+    // Collection
+    const COLLECTION_KEY = 'shangyan_fish_collection_v2';
+    let collection = {};
+    try { collection = JSON.parse(localStorage.getItem(COLLECTION_KEY) || '{}'); } catch(e) { collection = {}; }
+    function saveCollection() { try { localStorage.setItem(COLLECTION_KEY, JSON.stringify(collection)); } catch(e) {} saveGameSave(); }
+    // 載入提示：顯示存檔狀態
+    (function updateLoadHint() {
+      const el = document.getElementById('load-hint');
+      if (!el) return;
+      const n = Object.keys(collection || {}).length;
+      if (fishCaught > 0 || n > 0) {
+        el.textContent = '存檔已載入：魚獲 ' + fishCaught + ' · 圖鑑 ' + n + ' 種 · 點開始即可';
+      } else {
+        el.textContent = '載入完成 · 點開始即可（首次遊玩）';
+      }
+    })();
+
+    const ACH_KEY = 'shangyan_achievements_v1';
+    let achievementsUnlocked = {};
+    try { achievementsUnlocked = JSON.parse(localStorage.getItem(ACH_KEY) || '{}'); } catch(e) { achievementsUnlocked = {}; }
+    function saveAchievements() {
+      try { localStorage.setItem(ACH_KEY, JSON.stringify(achievementsUnlocked)); } catch(e) {}
+    }
+
+    // 36 成就：幽默／諧音／商研梗
+    const ACHIEVEMENTS = [
+      { id: 'first_cast', icon: '🎣', title: '初來乍釣', desc: '完成第一次拋竿（人生第一次總是最緊張）' },
+      { id: 'first_fish', icon: '🐟', title: '有魚了！', desc: '釣上人生第一條魚' },
+      { id: 'first_trash', icon: '🗑️', title: '垃圾車來了', desc: '釣到垃圾——河川也需要你關心' },
+      { id: 'escape_1', icon: '💨', title: '脫鉤人生', desc: '體驗一次脫鉤（它游得比你的 KPI 還快）' },
+      { id: 'trash_3', icon: '♻️', title: '環保志工', desc: '累計釣到 3 件垃圾' },
+      { id: 'trash_10', icon: '🌊', title: '淨灘達人', desc: '累計釣到 10 件垃圾' },
+      { id: 'small_5', icon: '🫧', title: '小魚多多', desc: '累計釣到 5 條小魚' },
+      { id: 'small_20', icon: '🏫', title: '小魚池館長', desc: '累計釣到 20 條小魚' },
+      { id: 'big_1', icon: '🍖', title: '大魚大肉', desc: '釣到第一條大魚' },
+      { id: 'big_5', icon: '🏋️', title: '大隻佬', desc: '累計釣到 5 條大魚' },
+      { id: 'huge_1', icon: '🐋', title: '巨物恐慌', desc: '釣上超大型魚（影子先嚇到你）' },
+      { id: 'huge_3', icon: '🐉', title: '湖中霸主', desc: '累計 3 條超大型魚' },
+      { id: 'nessie', icon: '❓', title: '???本人', desc: '釣到尼斯湖水怪（不是都市傳說）' },
+      { id: 'ruby', icon: '💎', title: '紅寶石王', desc: '以 0.1% 機率釣到紅寶石' },
+      { id: 'dex_10', icon: '📖', title: '圖鑑新手', desc: '圖鑑收集滿 10 種' },
+      { id: 'dex_25', icon: '📗', title: '四分之一島主', desc: '圖鑑收集滿 25 種' },
+      { id: 'dex_50', icon: '📘', title: '半壁江山', desc: '圖鑑收集滿 50 種' },
+      { id: 'dex_80', icon: '📙', title: '圖鑑近完食', desc: '圖鑑收集滿 80 種' },
+      { id: 'dex_100', icon: '👑', title: '完圖之王', desc: '圖鑑收集滿 100 種以上！' },
+      { id: 'score_20', icon: '⭐', title: '二十分壽司', desc: '魚獲分數達到 20' },
+      { id: 'score_50', icon: '🍣', title: '五十分生魚片', desc: '魚獲分數達到 50' },
+      { id: 'score_100', icon: '🏆', title: '一百分壽司郎', desc: '魚獲分數達到 100' },
+      { id: 'quiz_1', icon: '📝', title: '問題魚初體驗', desc: '回答第一道商研題' },
+      { id: 'quiz_correct_1', icon: '✅', title: 'MECE 到不行', desc: '答對一題（相互獨立、完全窮盡你的分數）' },
+      { id: 'quiz_correct_5', icon: '🧠', title: '顧問預備役', desc: '累計答對 5 題' },
+      { id: 'quiz_wrong_1', icon: '🙈', title: '費米估錯了', desc: '答錯一題（不扣分，社博友善）' },
+      { id: 'rain', icon: '🌧️', title: '下雨天留客天', desc: '經歷一場雨天' },
+      { id: 'storm', icon: '⚡', title: '雷公助攻', desc: '經歷一場雷暴' },
+      { id: 'night', icon: '🌙', title: '深夜食堂', desc: '在深夜時段釣魚' },
+      { id: 'cast_10', icon: '🎯', title: '十擲成詩', desc: '累計拋竿 10 次' },
+      { id: 'cast_30', icon: '🔁', title: '上鉤成癮', desc: '累計拋竿 30 次' },
+      { id: 'escape_3', icon: '🏃', title: '滑溜社', desc: '累計脫鉤 3 次（魚比你會滑）' },
+      { id: 'new_5', icon: '✨', title: '收藏癖發作', desc: '解鎖 5 次「新圖鑑」' },
+      { id: 'both_extreme', icon: '🎰', title: '歐非一體', desc: '同一天內釣過垃圾與紅寶石／???' },
+      { id: 'quiz_all_tag', icon: '📚', title: '社課全勤', desc: '答過至少 3 種不同社課標籤的題' },
+      { id: 'share_ready', icon: '📣', title: '社博之光', desc: '圖鑑進度達 10 種，可以去限動炫耀了' },
+      { id: 'turtle_1', icon: '🐢', title: '慢郎中上鉤', desc: '釣到第一隻烏龜（它比你還淡定）' },
+      { id: 'turtle_3', icon: '🐢', title: '龜派氣功', desc: '累計釣到 3 隻烏龜' },
+      { id: 'turtle_all_small', icon: '🪴', title: '小龜園丁', desc: '收集全部小龜圖鑑' },
+      { id: 'turtle_big', icon: '🐢', title: '甲殼坦克', desc: '釣到一隻大龜' },
+      { id: 'parrot_pet', icon: '🦜', title: '肩上賢者', desc: '點一下肩上的鸚鵡（它記得你）' },
+      { id: 'fog', icon: '🌫️', title: '霧鎖湖面', desc: '經歷一場起霧' },
+      { id: 'mission_day', icon: '📋', title: '攤位一日店長', desc: '完成當日全部攤位任務' },
+      { id: 'bait_1', icon: '🪱', title: '魚餌收藏家', desc: '獲得第一枚像素魚餌' },
+      { id: 'bait_use', icon: '🎣', title: '專業釣手', desc: '使用一次魚餌拋竿' }
+    ];
+
+    let stats = {
+      casts: 0, escapes: 0, trash: 0, small: 0, big: 0, huge: 0, turtles: 0,
+      quizAnswered: 0, quizCorrect: 0, quizWrong: 0, newUnlocks: 0,
+      sawRain: false, sawStorm: false, sawNight: false, sawFog: false,
+      gotTrash: false, gotLegend: false, quizTags: {}, parrotPet: false
+    };
+    try {
+      const s = JSON.parse(localStorage.getItem('shangyan_stats_v1') || 'null');
+      if (s) stats = Object.assign(stats, s);
+    } catch(e) {}
+    function saveStats() {
+      try { localStorage.setItem('shangyan_stats_v1', JSON.stringify(stats)); } catch(e) {}
+    }
+
+    function unlockAch(id) {
+      if (achievementsUnlocked[id]) return;
+      const def = ACHIEVEMENTS.find(a => a.id === id);
+      if (!def) return;
+      achievementsUnlocked[id] = Date.now();
+      saveAchievements();
+      const toast = document.getElementById('ach-toast');
+      if (toast) {
+        toast.innerHTML = '🏅 成就解鎖<br><b>' + def.title + '</b><br><span style="font-size:11px;opacity:0.9;">' + def.desc + '</span>';
+        toast.style.display = 'block';
+        clearTimeout(window._achToastTimer);
+        window._achToastTimer = setTimeout(() => { toast.style.display = 'none'; }, 2800);
+      }
+    }
+
+    function checkAchievements() {
+      const dex = Object.keys(collection).length;
+      if (stats.casts >= 1) unlockAch('first_cast');
+      if (stats.small + stats.big + stats.huge > 0) unlockAch('first_fish');
+      if (stats.trash >= 1) unlockAch('first_trash');
+      if (stats.escapes >= 1) unlockAch('escape_1');
+      if (stats.escapes >= 3) unlockAch('escape_3');
+      if (stats.trash >= 3) unlockAch('trash_3');
+      if (stats.trash >= 10) unlockAch('trash_10');
+      if (stats.small >= 5) unlockAch('small_5');
+      if (stats.small >= 20) unlockAch('small_20');
+      if (stats.big >= 1) unlockAch('big_1');
+      if (stats.big >= 5) unlockAch('big_5');
+      if (stats.huge >= 1) unlockAch('huge_1');
+      if (stats.huge >= 3) unlockAch('huge_3');
+      if (collection['nessie']) unlockAch('nessie');
+      if (collection['ruby']) unlockAch('ruby');
+      if (dex >= 10) { unlockAch('dex_10'); unlockAch('share_ready'); }
+      if ((stats.turtles || 0) >= 1) unlockAch('turtle_1');
+      if ((stats.turtles || 0) >= 3) unlockAch('turtle_3');
+      if (stats.parrotPet) unlockAch('parrot_pet');
+      if (stats.sawFog) unlockAch('fog');
+      // 小龜全收集
+      try {
+        const smallT = TURTLES.filter(t => t.size === 'small');
+        if (smallT.every(t => collection['turtle_' + t.name])) unlockAch('turtle_all_small');
+        if (TURTLES.some(t => t.size === 'big' && collection['turtle_' + t.name])) unlockAch('turtle_big');
+      } catch(e) {}
+      if (dex >= 25) unlockAch('dex_25');
+      if (dex >= 50) unlockAch('dex_50');
+      if (dex >= 80) unlockAch('dex_80');
+      if (dex >= 100) unlockAch('dex_100');
+      if (fishCaught >= 20) unlockAch('score_20');
+      if (fishCaught >= 50) unlockAch('score_50');
+      if (fishCaught >= 100) unlockAch('score_100');
+      if (stats.quizAnswered >= 1) unlockAch('quiz_1');
+      if (stats.quizCorrect >= 1) unlockAch('quiz_correct_1');
+      if (stats.quizCorrect >= 5) unlockAch('quiz_correct_5');
+      if (stats.quizWrong >= 1) unlockAch('quiz_wrong_1');
+      if (stats.sawRain) unlockAch('rain');
+      if (stats.sawStorm) unlockAch('storm');
+      if (stats.sawNight) unlockAch('night');
+      if (stats.casts >= 10) unlockAch('cast_10');
+      if (stats.casts >= 30) unlockAch('cast_30');
+      if (stats.newUnlocks >= 5) unlockAch('new_5');
+      if (stats.gotTrash && stats.gotLegend) unlockAch('both_extreme');
+      if (Object.keys(stats.quizTags || {}).length >= 3) unlockAch('quiz_all_tag');
+    }
+
+    function drawAchPixelIcon(c, id, unlocked) {
+      const p = (x,y,w,h,col) => { c.fillStyle = col; c.fillRect(x|0,y|0,Math.max(1,w|0),Math.max(1,h|0)); };
+      c.fillStyle = unlocked ? '#0a2840' : '#0a1520';
+      c.fillRect(0,0,36,36);
+      if (!unlocked) {
+        p(12,10,12,14,'#2a3a4a'); p(14,8,8,4,'#2a3a4a'); p(15,14,6,2,'#1a2a3a');
+        p(15,18,6,4,'#3a4a5a'); p(16,19,4,2,'#5a6a7a');
+        return;
+      }
+      // pixel icons by achievement id family
+      if (id.indexOf('cast') >= 0 || id === 'first_cast') {
+        p(6,28,24,4,'#5a4a2a'); p(8,26,20,2,'#7a6a3a');
+        p(26,8,3,20,'#c4a070'); p(24,6,7,4,'#8a8a8a'); p(28,4,2,4,'#e8d090');
+      } else if (id.indexOf('trash') >= 0 || id === 'first_trash') {
+        p(12,10,12,18,'#b8e0ec'); p(14,8,8,4,'#9ad0e0'); p(15,6,6,3,'#2a8a4a');
+        p(13,16,10,4,'#e8e8e8');
+      } else if (id.indexOf('escape') >= 0) {
+        p(8,14,16,8,'#5b9bd5'); p(20,15,8,6,'#5b9bd5'); p(22,16,2,2,'#111');
+        p(4,12,6,4,'#3a7ab5'); p(26,14,6,3,'#a0c0e0'); p(28,12,4,2,'#c0d8f0');
+      } else if (id.indexOf('small') >= 0 || id === 'first_fish') {
+        p(8,14,16,8,'#70c0a0'); p(20,15,6,6,'#70c0a0'); p(22,16,2,2,'#111');
+        p(4,12,6,4,'#50a080'); p(12,10,6,4,'#50a080');
+      } else if (id.indexOf('big') >= 0) {
+        p(4,12,20,12,'#e67e22'); p(20,14,10,8,'#e67e22'); p(24,15,3,3,'#111');
+        p(0,10,6,6,'#c65e02'); p(10,8,8,5,'#c65e02'); p(8,22,6,4,'#c65e02');
+      } else if (id.indexOf('huge') >= 0) {
+        p(2,12,24,12,'#6b8f5e'); p(22,10,10,14,'#6b8f5e'); p(26,12,3,3,'#fff'); p(27,13,2,2,'#111');
+        p(0,8,6,6,'#4a6f3e'); p(8,6,10,6,'#4a6f3e');
+      } else if (id === 'nessie') {
+        p(4,18,22,8,'#2f6b4e'); p(10,10,8,10,'#2f6b4e'); p(18,6,8,12,'#2f6b4e');
+        p(24,4,8,8,'#2f6b4e'); p(28,6,3,3,'#f0e8a0');
+      } else if (id === 'ruby') {
+        p(14,6,8,4,'#ff6a8a'); p(12,10,12,6,'#e02050'); p(10,16,16,10,'#c01040');
+        p(14,14,4,4,'#ffb0c0');
+      } else if (id.indexOf('turtle') >= 0) {
+        c.fillStyle = unlocked ? '#2a6a3a' : '#333';
+        c.fillRect(4, 8, 20, 12);
+        c.fillStyle = unlocked ? '#1a4a2a' : '#222';
+        c.fillRect(8, 10, 6, 6); c.fillRect(14, 10, 6, 6);
+        c.fillStyle = unlocked ? '#5a8a4a' : '#444';
+        c.fillRect(22, 10, 6, 5);
+      } else if (id === 'parrot_pet') {
+        c.fillStyle = unlocked ? '#2a9a3a' : '#333';
+        c.fillRect(8, 8, 12, 10);
+        c.fillStyle = unlocked ? '#e0a030' : '#555';
+        c.fillRect(18, 10, 4, 3);
+      } else if (id === 'fog') {
+        c.fillStyle = unlocked ? '#c0c8d0' : '#333';
+        c.fillRect(4, 10, 20, 6); c.fillRect(8, 16, 16, 5);
+      } else if (id.indexOf('dex') >= 0 || id === 'share_ready') {
+        p(8,6,20,24,'#e8d9b5'); p(10,8,16,20,'#1a3048'); p(12,12,12,2,'#7fff7f');
+        p(12,16,10,2,'#5a8aaa'); p(12,20,12,2,'#5a8aaa');
+      } else if (id.indexOf('score') >= 0) {
+        p(10,8,16,16,'#ffd780'); p(12,10,12,12,'#e8b050'); p(16,14,4,4,'#fff8e0');
+        p(14,24,8,4,'#c09030');
+      } else if (id.indexOf('quiz') >= 0) {
+        p(8,6,20,24,'#f0e6d0'); p(10,8,16,20,'#fff'); p(12,12,12,2,'#333');
+        p(12,16,10,2,'#333'); p(12,20,8,2,'#3a8a5a');
+      } else if (id === 'rain') {
+        p(6,8,24,10,'#6a7080'); p(10,6,16,8,'#8a90a0');
+        p(10,20,2,8,'#a0c0e0'); p(16,22,2,8,'#a0c0e0'); p(22,20,2,8,'#a0c0e0');
+      } else if (id === 'storm') {
+        p(4,6,28,12,'#3a4555'); p(16,16,4,4,'#ffe080'); p(14,20,8,2,'#ffe080');
+        p(18,22,3,6,'#ffe080');
+      } else if (id === 'night') {
+        p(0,0,36,36,'#1a2038'); p(22,8,8,8,'#e8e0a0'); p(24,10,4,4,'#fff8c0');
+        p(6,12,2,2,'#fff'); p(12,8,2,2,'#fff'); p(8,20,2,2,'#fff');
+      } else if (id === 'new_5') {
+        p(16,4,4,4,'#ffe080'); p(14,8,8,4,'#ffe080'); p(10,12,16,4,'#e8c050');
+        p(16,16,4,12,'#e8c050');
+      } else if (id === 'both_extreme') {
+        p(4,12,12,14,'#b8e0ec'); p(20,10,12,16,'#e02050'); p(24,14,4,4,'#ffb0c0');
+      } else if (id === 'quiz_all_tag') {
+        p(6,8,10,14,'#e8d9b5'); p(14,10,10,14,'#e8d9b5'); p(22,12,10,14,'#e8d9b5');
+        p(8,12,6,2,'#333'); p(16,14,6,2,'#333'); p(24,16,6,2,'#333');
+      } else {
+        // default trophy
+        p(12,6,12,10,'#ffd780'); p(10,14,16,4,'#e8b050'); p(16,18,4,8,'#c09030');
+        p(12,26,12,4,'#c09030');
+      }
+    }
+
+    function buildAchievementList() {
+      const list = document.getElementById('ach-list');
+      const st = document.getElementById('ach-stats');
+      list.innerHTML = '';
+      let n = 0;
+      ACHIEVEMENTS.forEach(a => {
+        const on = !!achievementsUnlocked[a.id];
+        if (on) n++;
+        const div = document.createElement('div');
+        div.className = 'ach-item' + (on ? '' : ' locked');
+        const cnv = document.createElement('canvas');
+        cnv.className = 'ach-icon';
+        cnv.width = 36; cnv.height = 36;
+        const c = cnv.getContext('2d');
+        c.imageSmoothingEnabled = false;
+        drawAchPixelIcon(c, a.id, on);
+        const text = document.createElement('div');
+        text.innerHTML = '<div class="ach-title">' + (on ? a.title : '???') +
+          '</div><div class="ach-desc">' + (on ? a.desc : '尚未解鎖') + '</div>';
+        div.appendChild(cnv);
+        div.appendChild(text);
+        list.appendChild(div);
+      });
+      st.textContent = n + ' / ' + ACHIEVEMENTS.length;
+    }
+    function openAchievements() {
+      buildAchievementList();
+      document.getElementById('achievement-modal').classList.add('show');
+    }
+    function closeAchievements() {
+      document.getElementById('achievement-modal').classList.remove('show');
+    }
+
+
+    function getItemKey(loot) {
+      if (loot.type === 'trash') return 'trash_' + loot.data.name;
+      if (loot.type === 'nessie') return 'nessie';
+      if (loot.type === 'ruby') return 'ruby';
+      if (loot.type === 'turtle') return 'turtle_' + loot.data.name;
+      return 'fish_' + loot.data.name;
+    }
+    function markCollected(loot) {
+      const key = getItemKey(loot);
+      let isNew = false;
+      if (!collection[key]) {
+        collection[key] = { count: 1, firstAt: Date.now() };
+        isNew = true;
+        stats.newUnlocks = (stats.newUnlocks || 0) + 1;
+      } else {
+        collection[key].count = (collection[key].count || 1) + 1;
+      }
+      if (loot.type === 'trash') { stats.trash++; stats.gotTrash = true; }
+      else if (loot.type === 'small') stats.small++;
+      else if (loot.type === 'big') stats.big++;
+      else if (loot.type === 'huge') stats.huge++;
+      else if (loot.type === 'turtle') {
+        stats.turtles = (stats.turtles || 0) + 1;
+        if (loot.data && loot.data.size === 'big') stats.big++;
+        else stats.small++;
+      }
+      else if (loot.type === 'nessie' || loot.type === 'ruby') stats.gotLegend = true;
+      saveStats();
+      saveCollection();
+      checkAchievements();
+      return isNew;
+    }
+
+    function resize() {
+      W = window.innerWidth; H = window.innerHeight;
+      canvas.width = W; canvas.height = H;
+      isPortrait = H > W;
+      // 原本邏輯：完整顯示、不強制放大裁切
+      // 橫向：以短邊貼齊，盡量滿版；直向：寬度填滿、垂直置中
+      if (isPortrait) {
+        scale = (W / IW) * (sceneZoom || 1);
+        viewOX = (W - IW * scale) / 2;
+        viewOY = (H - IH * scale) / 2;
+      } else {
+        // 橫向全螢幕：contain 置中（比例接近時幾乎無邊）
+        scale = Math.min(W / IW, H / IH) * (sceneZoom || 1);
+        viewOX = (W - IW * scale) / 2;
+        viewOY = (H - IH * scale) / 2;
+      }
+    }
+    window.addEventListener('resize', resize);
+    window.addEventListener('orientationchange', () => setTimeout(resize, 100));
+    resize();
+
+    function lerp(a, b, t) { return a + (b - a) * Math.max(0, Math.min(1, t)); }
+    function lerpColor(c1, c2, t) {
+      const p = s => {
+        if (s.startsWith('#')) { const h = parseInt(s.slice(1), 16); return [(h>>16)&255,(h>>8)&255,h&255]; }
+        const m = s.match(/\d+/g); return m ? [+m[0],+m[1],+m[2]] : [0,0,0];
+      };
+      const A = p(c1), B = p(c2);
+      return `rgb(${Math.round(lerp(A[0],B[0],t))},${Math.round(lerp(A[1],B[1],t))},${Math.round(lerp(A[2],B[2],t))})`;
+    }
+    function getSky(t) {
+      if (t < 0.18) return lerpColor('#1a2a40', '#ffb080', t/0.18);
+      if (t < 0.28) return lerpColor('#ffb080', '#a8d4e8', (t-0.18)/0.1);
+      if (t < 0.72) return '#a8d4e8';
+      if (t < 0.82) return lerpColor('#a8d4e8', '#ff8a60', (t-0.72)/0.1);
+      if (t < 0.92) return lerpColor('#ff8a60', '#1a2a40', (t-0.82)/0.1);
+      return '#1a2a40';
+    }
+    function getWater(t) {
+      if (t < 0.22 || t > 0.85) return '#2a4a60';
+      if (t < 0.32) return lerpColor('#2a4a60', '#6a9ab8', (t-0.22)/0.1);
+      if (t > 0.75) return lerpColor('#6a9ab8', '#2a4a60', (t-0.75)/0.1);
+      return '#6a9ab8';
+    }
+    function getTimeLabel(t) {
+      if (t < 0.18) return '深夜'; if (t < 0.28) return '黎明'; if (t < 0.42) return '早晨';
+      if (t < 0.55) return '中午'; if (t < 0.72) return '下午'; if (t < 0.82) return '黃昏';
+      if (t < 0.92) return '夜晚'; return '深夜';
+    }
+
+    function px(x, y, w, h, c) {
+      ctx.fillStyle = c;
+      ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(w), Math.ceil(h));
+    }
+    // soft vertical gradient band (for sky/water depth)
+    function gradV(x, y, w, h, c1, c2, steps) {
+      steps = steps || Math.max(4, Math.floor(h / 3));
+      for (let i = 0; i < steps; i++) {
+        const t = i / (steps - 1 || 1);
+        px(x, y + (h * i) / steps, w, Math.ceil(h / steps) + 1, lerpColor(c1, c2, t));
+      }
+    }
+    // deterministic tiny noise (stable per cell, not flicker)
+    function noise01(x, y, seed) {
+      const n = Math.sin((x * 12.9898 + y * 78.233 + (seed || 0) * 45.164) * 43758.5453);
+      return n - Math.floor(n);
+    }
+    // fill rect with subtle grain / CRT-ish pixel variation
+    function pxNoise(x, y, w, h, c, amount, seed) {
+      amount = amount == null ? 0.06 : amount;
+      seed = seed || 1;
+      const stepsX = Math.max(1, Math.floor(w));
+      const stepsY = Math.max(1, Math.floor(h));
+      // base fill
+      px(x, y, w, h, c);
+      // sparse noise dots (skip most cells for performance)
+      for (let iy = 0; iy < stepsY; iy += 2) {
+        for (let ix = 0; ix < stepsX; ix += 2) {
+          const n = noise01(Math.floor(x) + ix, Math.floor(y) + iy, seed);
+          if (n > 0.72) {
+            const t = (n - 0.72) / 0.28 * amount;
+            const brighter = n > 0.88;
+            px(x + ix, y + iy, 1, 1, brighter
+              ? lerpColor(c, '#ffffff', t * 0.9)
+              : lerpColor(c, '#000000', t * 1.1));
+          }
+        }
+      }
+    }
+    // wood plank with hairline gap + slight color drift + optional offset
+    function woodPlank(x, y, w, h, base, gap, seed) {
+      gap = gap == null ? 1 : gap;
+      seed = seed || 3;
+      const drift = (noise01(x, y, seed) - 0.5) * 0.08;
+      const col = lerpColor(base, drift > 0 ? '#ffffff' : '#000000', Math.abs(drift));
+      // main plank body inset by hairline gap on right/bottom
+      pxNoise(x, y, Math.max(1, w - gap), Math.max(1, h - gap), col, 0.05, seed);
+      // dark hairline gap (grid gap)
+      if (gap > 0) {
+        px(x + w - gap, y, gap, h, 'rgba(20,12,8,0.35)');
+        px(x, y + h - gap, w, gap, 'rgba(20,12,8,0.28)');
+      }
+      // top rim micro-highlight
+      px(x, y, Math.max(1, w - gap), 1, lerpColor(col, '#ffffff', 0.12));
+    }
+    // slightly misaligned brick/tile row
+    function tileRow(x, y, count, tw, th, base, seed) {
+      for (let i = 0; i < count; i++) {
+        const mis = (noise01(x + i * tw, y, seed) > 0.82) ? 1 : 0; // occasional 1px offset
+        const shade = (noise01(x + i, y, seed + 2) - 0.5) * 0.1;
+        const col = lerpColor(base, shade > 0 ? '#ffffff' : '#000000', Math.abs(shade));
+        pxNoise(x + i * tw, y + mis, tw - 1, th - 1, col, 0.07, seed + i);
+        px(x + i * tw + tw - 1, y, 1, th, 'rgba(0,0,0,0.2)'); // vertical gap
+      }
+      px(x, y + th - 1, count * tw, 1, 'rgba(0,0,0,0.18)'); // horizontal gap
+    }
+
+    // ========== Cozy scene with light / depth / material ==========
+    function drawSky(t) {
+      let top = getSky(t);
+      let mid = lerpColor(top, '#c8e0f0', 0.35);
+      let bot = lerpColor(top, '#e8f4f8', 0.55);
+      if (weather === 'rain') {
+        top = lerpColor(top, '#5a6a7a', 0.45);
+        mid = lerpColor(mid, '#6a7a8a', 0.4);
+        bot = lerpColor(bot, '#7a8a9a', 0.35);
+      } else if (weather === 'storm') {
+        top = lerpColor(top, '#2a3545', 0.65);
+        mid = lerpColor(mid, '#3a4555', 0.55);
+        bot = lerpColor(bot, '#4a5565', 0.45);
+      }
+      gradV(0, 0, IW, 90, top, mid, 8);
+      gradV(0, 90, IW, 58, mid, bot, 6);
+      // sun only when clear & daytime
+      if (weather === 'clear' && t > 0.25 && t < 0.8) {
+        const sx = IW * 0.72, sy = 48;
+        ctx.fillStyle = 'rgba(255,240,180,0.12)';
+        ctx.beginPath(); ctx.arc(sx, sy, 55, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,230,150,0.18)';
+        ctx.beginPath(); ctx.arc(sx, sy, 28, 0, Math.PI*2); ctx.fill();
+        px(sx - 8, sy - 8, 16, 16, '#ffe8a0');
+        px(sx - 5, sy - 5, 10, 10, '#fff5c8');
+      }
+    }
+
+    function drawClouds(t) {
+      const alpha = (t > 0.2 && t < 0.85) ? 0.92 : 0.22;
+      ctx.globalAlpha = alpha;
+      const o = (cloudOffset * 0.2) % (IW + 100);
+      const stormy = weather !== 'clear';
+      const c1 = stormy ? '#6a7080' : '#f8f4e8';
+      const c2 = stormy ? '#4a5060' : '#e8e0d0';
+      const c3 = stormy ? '#8a90a0' : '#fffef8';
+      function softCloud(cx, cy, sc) {
+        px(cx, cy, 50*sc, 18*sc, c1);
+        px(cx+12*sc, cy-12*sc, 36*sc, 16*sc, c1);
+        px(cx+28*sc, cy-6*sc, 28*sc, 14*sc, c1);
+        px(cx+8*sc, cy+4*sc, 40*sc, 8*sc, c2);
+        px(cx+14*sc, cy-10*sc, 20*sc, 4*sc, c3);
+      }
+      softCloud(20 - o*0.5, 28, 1.2);
+      softCloud(160 + o*0.3, 18, 1.4);
+      softCloud(280 - o*0.4, 35, 1.0);
+      ctx.globalAlpha = 1;
+    }
+
+    function drawBirds() {
+      const birds = [
+        [80 + Math.sin(birdPhase)*20, 40 + Math.sin(birdPhase*1.3)*5],
+        [200 + Math.cos(birdPhase*0.8)*30, 25],
+        [320 + Math.sin(birdPhase*0.6)*15, 45],
+        [150, 55 + Math.cos(birdPhase)*4]
+      ];
+      birds.forEach(([bx, by], i) => {
+        const flap = Math.sin(birdPhase * 3 + i) * 3;
+        ctx.strokeStyle = '#6a7a8a';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(bx - 5, by + flap);
+        ctx.lineTo(bx, by);
+        ctx.lineTo(bx + 5, by + flap);
+        ctx.stroke();
+        // tiny body
+        px(bx - 1, by - 1, 3, 2, '#7a8a9a');
+      });
+    }
+
+    function drawWeatherFX() {
+      if (weather === 'clear') return;
+      // rain drops
+      // 低階／手機：減少雨滴以提升效能
+      const lowPower = (window.innerWidth * window.innerHeight < 500000) ||
+        (/iPhone|iPad|Android/i.test(navigator.userAgent));
+      let density = weather === 'storm'
+        ? (lowPower ? 36 : 70)
+        : (lowPower ? 20 : 40);
+      density = Math.max(12, Math.floor(density * (typeof perfScale === 'number' ? perfScale : 1)));
+      while (rainDrops.length < density) {
+        rainDrops.push({
+          x: Math.random() * (IW + 40) - 20,
+          y: Math.random() * IH,
+          len: weather === 'storm' ? 8 + Math.random() * 8 : 5 + Math.random() * 5,
+          spd: weather === 'storm' ? 4 + Math.random() * 3 : 2.5 + Math.random() * 2,
+          drift: weather === 'storm' ? 1.2 : 0.6
+        });
+      }
+      ctx.strokeStyle = weather === 'storm' ? 'rgba(180,200,220,0.55)' : 'rgba(200,220,240,0.4)';
+      ctx.lineWidth = 1.2;
+      if (rainDrops.length > density) rainDrops.length = density;
+      // 用 fillRect 取代 stroke，手機較省
+      const rainCol = weather === 'storm' ? 'rgba(180,200,220,0.55)' : 'rgba(200,220,240,0.4)';
+      ctx.fillStyle = rainCol;
+      rainDrops.forEach(d => {
+        ctx.fillRect(d.x|0, d.y|0, 1, d.len|0);
+      });
+      // lightning flash overlay
+      if (lightningFlash > 0) {
+        ctx.fillStyle = `rgba(220,230,255,${lightningFlash * 0.45})`;
+        ctx.fillRect(0, 0, IW, IH);
+      }
+      // storm dark vignette
+      if (weather === 'storm') {
+        ctx.fillStyle = 'rgba(20,30,50,0.18)';
+        ctx.fillRect(0, 0, IW, IH);
+      }
+    }
+
+    function drawWater(t) {
+      const baseY = 148;
+      const deep = getWater(t);
+      const shallow = lerpColor(deep, '#a8d0e8', 0.35);
+      const mid = lerpColor(shallow, deep, 0.45);
+      gradV(0, baseY, IW, 12, shallow, mid, 6);
+      gradV(0, baseY + 12, IW, IH - baseY - 12, mid, deep, 8);
+      // multi-layer surface sheen
+      px(0, baseY, IW, 1, 'rgba(255,255,255,0.18)');
+      px(0, baseY + 1, IW, 2, 'rgba(255,255,255,0.1)');
+      px(0, baseY + 3, IW, 1, 'rgba(200,230,255,0.06)');
+      // secondary wave bands (depth layers)
+      for (let band = 0; band < 3; band++) {
+        const by = baseY + 18 + band * 14;
+        for (let i = 0; i < 8; i++) {
+          const wx = (i * 55 + wavePhase * (10 + band * 2) + band * 20) % (IW + 60) - 30;
+          px(wx, by + Math.sin(wavePhase + i + band) * 1.5, 22, 1, 'rgba(255,255,255,' + (0.06 - band * 0.015) + ')');
+        }
+      }
+      // animated specular highlights (more + soft secondary)
+      for (let i = 0; i < 16; i++) {
+        const wx = (i * 36 + wavePhase * 14) % (IW + 50) - 25;
+        const wy = baseY + 6 + Math.sin(wavePhase * 0.95 + i * 0.7) * 2.5;
+        px(wx, wy, 16 + (i%3)*5, 2, 'rgba(255,255,255,0.22)');
+        px(wx + 2, wy + 2, 12, 1, 'rgba(220,240,255,0.1)');
+        px(wx + 5, wy + 5, 8, 1, 'rgba(180,210,240,0.05)');
+      }
+      // underwater dark gradient stacks
+      px(0, IH - 28, IW, 10, 'rgba(10,30,50,0.12)');
+      px(0, IH - 18, IW, 10, 'rgba(8,24,40,0.2)');
+      px(0, IH - 8, IW, 8, 'rgba(5,15,30,0.28)');
+      // faint caustic dots
+      for (let i = 0; i < 14; i++) {
+        const cx = (i * 47 + wavePhase * 8) % IW;
+        const cy = baseY + 30 + (i * 13) % 40;
+        px(cx, cy, 2, 1, 'rgba(255,255,255,0.08)');
+        px(cx + 3, cy + 2, 1, 1, 'rgba(200,230,255,0.05)');
+      }
+      // horizon soft line
+      px(0, baseY - 1, IW, 1, 'rgba(255,255,255,0.06)');
+    }
+
+    function drawShore() {
+      // solid land under cabin + left shore, with grain + imperfect edge
+      pxNoise(0, 128, 55, 22, '#5a6a3a', 0.08, 40);
+      pxNoise(0, 128, 55, 6, '#6a8a4a', 0.06, 41);
+      pxNoise(0, 145, 50, 8, '#4a5a2a', 0.07, 42);
+      // uneven shore edge into water
+      for (let i = 0; i < 12; i++) {
+        const ox = i * 4 + (noise01(i, 150, 5) > 0.5 ? 1 : 0);
+        px(ox, 150 + (i % 3), 3, 2, '#3a4a22');
+      }
+      // pebbles / rocks at water edge
+      px(8, 146, 6, 4, '#7a7a6a');
+      px(20, 148, 5, 3, '#6a6a5a');
+      px(32, 147, 7, 4, '#8a8a7a');
+      px(42, 149, 4, 3, '#5a5a4a');
+      // small path / ground under cabin foundation
+      px(0, 140, 48, 6, '#6a5a40');
+      px(0, 142, 48, 2, '#5a4a30');
+    }
+
+    function drawCabin() {
+      // foundation sitting on shore
+      px(0, 138, 48, 8, '#4a4a3a');
+      px(0, 138, 48, 2, '#5a5a4a');
+      // wall: horizontal siding with hairline gaps + noise + tiny misalign
+      for (let i = 0; i < 6; i++) {
+        const yy = 70 + i * 11;
+        const mis = (i === 2 || i === 4) ? 1 : 0;
+        woodPlank(0 + mis, yy, 48, 11, i % 2 === 0 ? '#5a7a8a' : '#567686', 1, 10 + i);
+      }
+      px(0, 70, 6, 68, 'rgba(0,0,0,0.12)'); // left shade
+      px(42, 70, 6, 68, 'rgba(255,255,255,0.05)'); // right light
+      // roof tiles with micro gaps + slight color variation
+      tileRow(0, 52, 7, 8, 8, '#c45a3a', 50);
+      tileRow(0, 60, 7, 8, 8, '#b05030', 51);
+      px(0, 50, 55, 3, '#e07050');
+      px(0, 68, 55, 3, 'rgba(0,0,0,0.22)');
+      pxNoise(0, 52, 55, 16, '#c45a3a', 0.04, 52);
+      // window recessed
+      px(12, 90, 16, 18, '#1a2a35');
+      px(13, 91, 14, 16, '#2a3a4a');
+      px(14, 92, 5, 6, '#5a8aaa');
+      px(21, 92, 5, 6, '#4a7a9a');
+      px(14, 100, 5, 6, '#3a6a8a');
+      px(21, 100, 5, 6, '#3a6a8a');
+      px(14, 92, 5, 1, 'rgba(255,255,255,0.25)');
+      px(12, 98, 16, 1, '#3a4a5a');
+      px(19, 90, 1, 18, '#3a4a5a');
+      // chimney
+      px(34, 42, 8, 12, '#6a6a5a');
+      px(34, 42, 2, 12, '#4a4a3a');
+      px(39, 42, 2, 12, '#8a8a7a');
+      px(33, 40, 10, 3, '#5a5a4a');
+      px(35, 38, 3, 3, 'rgba(200,200,200,0.25)');
+      // door
+      px(30, 118, 12, 20, '#4a3a28');
+      px(31, 119, 10, 18, '#5a4a32');
+      px(32, 120, 3, 16, '#3a2a18');
+      px(38, 128, 2, 2, '#c4a050');
+      // stronger foundation shadow stack
+      px(1, 145, 46, 2, 'rgba(0,0,0,0.28)');
+      px(3, 147, 42, 2, 'rgba(0,0,0,0.12)');
+    }
+
+    function drawReeds() {
+      // reeds grow FROM the shore ground (y ~ 138-140), not floating
+      const groundY = 140;
+      for (let i = 0; i < 18; i++) {
+        const rx = 48 + i * 6 + (i % 3);
+        const rh = 14 + (i * 9) % 18;
+        const base = i % 2 === 0 ? '#6a8a3a' : '#5a7a2a';
+        const tip = i % 2 === 0 ? '#8aaa4a' : '#7a9a3a';
+        // stem from ground up
+        px(rx, groundY - rh, 2, rh, base);
+        px(rx, groundY - rh, 2, Math.max(3, rh * 0.3), tip);
+        px(rx + 1, groundY - rh + 2, 1, Math.max(2, rh - 4), 'rgba(0,0,0,0.12)');
+        // base clump on ground
+        px(rx - 1, groundY - 2, 4, 3, '#4a6a2a');
+        if (i % 5 === 0) {
+          px(rx - 1, groundY - rh - 4, 3, 4, '#c45a4a');
+          px(rx - 1, groundY - rh - 4, 3, 1, '#e08070');
+        }
+      }
+      // a few water-edge reeds slightly in water (shorter)
+      for (let i = 0; i < 5; i++) {
+        const rx = 52 + i * 8;
+        px(rx, 145, 2, 6, '#5a7a2a');
+        px(rx, 143, 2, 3, '#6a8a3a');
+      }
+    }
+
+    function drawDock() {
+      // platform underside shadow first (depth)
+      px(42, 150, 196, 5, 'rgba(20,30,40,0.28)');
+      px(48, 154, 180, 3, 'rgba(15,25,35,0.15)');
+      // platform: individual planks with hairline gaps + noise + slight offset
+      for (let i = 0; i < 10; i++) {
+        const px0 = 40 + i * 20;
+        const mis = (noise01(px0, 138, 7) > 0.85) ? 1 : 0;
+        const base = i % 2 === 0 ? '#8b6a45' : '#836240';
+        woodPlank(px0, 138 + mis, 20, 12, base, 1, 20 + i);
+        // top bevel highlight per plank
+        px(px0 + 1, 138 + mis, 17, 1, 'rgba(255,230,180,0.15)');
+        // nail dots
+        if (i % 2 === 0) {
+          px(px0 + 4, 142, 2, 2, '#5a4030');
+          px(px0 + 14, 142, 2, 2, '#5a4030');
+          px(px0 + 4, 142, 1, 1, '#8a7050');
+        }
+      }
+      px(40, 138, 200, 2, 'rgba(255,220,160,0.14)'); // sun wash
+      px(40, 148, 200, 2, 'rgba(0,0,0,0.12)'); // mid shade
+      px(40, 149, 200, 3, '#6a4a28'); // front edge dark
+      px(40, 151, 200, 1, '#4a3018'); // hard lip
+      // posts with cylinder shading + wet base + moss
+      for (let i = 0; i < 5; i++) {
+        const px0 = 55 + i * 40;
+        // soft ambient occlusion under platform around post
+        px(px0 - 3, 148, 13, 3, 'rgba(0,0,0,0.2)');
+        px(px0, 148, 7, 24, '#6a4a2a');
+        px(px0, 148, 2, 24, '#4a2a12'); // left shade
+        px(px0 + 2, 148, 2, 24, '#7a5a3a'); // mid
+        px(px0 + 5, 148, 2, 24, '#9a7a5a'); // right light
+        px(px0 + 6, 150, 1, 10, 'rgba(255,230,200,0.12)');
+        // wet ring
+        px(px0 - 1, 164, 9, 3, '#3a2a18');
+        px(px0, 166, 7, 6, '#3a5a2a'); // moss / algae
+        px(px0 + 1, 168, 5, 2, '#4a6a3a');
+        px(px0 + 2, 169, 3, 1, '#5a7a4a');
+        // contact shadow in water (soft stack)
+        px(px0 - 3, 172, 13, 2, 'rgba(0,20,40,0.3)');
+        px(px0 - 1, 174, 9, 2, 'rgba(0,20,40,0.15)');
+      }
+      // cast shadow under pier on water (layered)
+      px(50, 152, 180, 3, 'rgba(20,40,60,0.22)');
+      px(60, 155, 160, 3, 'rgba(20,40,60,0.1)');
+    }
+
+    function drawBoat() {
+      const bx = 160, by = 142;
+      // deep water contact shadow first
+      px(bx + 8, by + 22, 78, 4, 'rgba(15,30,45,0.28)');
+      px(bx + 14, by + 25, 66, 3, 'rgba(15,30,45,0.12)');
+      // hull body with volume + subtle material grain
+      pxNoise(bx, by + 8, 90, 14, '#c8b090', 0.06, 30);
+      pxNoise(bx + 2, by + 6, 86, 4, '#d8c4a0', 0.05, 31);
+      pxNoise(bx + 6, by + 18, 78, 5, '#9a8060', 0.07, 32);
+      // left/right volume shading
+      px(bx, by + 8, 5, 12, '#a88860');
+      px(bx + 1, by + 9, 3, 10, '#988050');
+      px(bx + 85, by + 8, 5, 12, '#e8d8b8');
+      px(bx + 87, by + 9, 2, 8, '#f4ecd0');
+      // micro panel lines + rivets
+      for (let i = 0; i < 5; i++) {
+        px(bx + 14 + i * 15, by + 9, 1, 10, 'rgba(0,0,0,0.1)');
+        px(bx + 16 + i * 15, by + 12, 2, 2, 'rgba(80,60,40,0.25)');
+      }
+      // gunwale rim (3-tone)
+      px(bx + 2, by + 2, 86, 5, '#e0d0b0');
+      px(bx + 3, by + 2, 84, 2, '#f0e4c8');
+      px(bx + 5, by + 2, 80, 1, '#faf4e4');
+      px(bx + 2, by + 6, 86, 1, 'rgba(0,0,0,0.12)');
+      // interior shadow bowl (deeper)
+      px(bx + 12, by + 7, 62, 9, '#a08860');
+      px(bx + 16, by + 9, 52, 5, '#907850');
+      px(bx + 20, by + 11, 42, 3, '#806840');
+      // seat plank
+      px(bx + 28, by + 8, 28, 3, '#b09070');
+      px(bx + 28, by + 8, 28, 1, '#d0b890');
+      // rear box / motor housing
+      px(bx - 8, by + 6, 14, 12, '#e0d8c8');
+      px(bx - 8, by + 6, 14, 3, '#f0e8e0');
+      px(bx - 8, by + 6, 3, 12, '#c8c0b0');
+      px(bx - 6, by + 10, 10, 6, '#b8b0a0');
+      px(bx - 5, by + 11, 3, 3, '#4a6a8a');
+      // waterline wet darkening (stacked)
+      px(bx + 4, by + 16, 82, 2, 'rgba(40,60,80,0.3)');
+      px(bx + 6, by + 18, 78, 2, 'rgba(40,60,80,0.15)');
+      // soft reflection (layered)
+      ctx.globalAlpha = 0.25;
+      px(bx + 8, by + 26, 76, 6, '#a89070');
+      ctx.globalAlpha = 0.14;
+      px(bx + 12, by + 32, 68, 5, '#8a7050');
+      ctx.globalAlpha = 0.07;
+      px(bx + 16, by + 37, 58, 3, '#6a5840');
+      ctx.globalAlpha = 1;
+    }
+
+    function drawDog() {
+      // 金毛坐在船裡 — 多層毛色／陰影
+      const dx = 188, dy = 128;
+      // body base + shade + highlight
+      px(dx, dy + 8, 26, 12, '#d4a574');
+      px(dx, dy + 8, 8, 12, '#b88850');
+      px(dx + 2, dy + 10, 6, 8, '#c09060');
+      px(dx + 14, dy + 8, 12, 5, '#e0b888');
+      px(dx + 16, dy + 9, 8, 3, '#f0d0a0');
+      px(dx + 8, dy + 10, 10, 6, '#e8d8c8');
+      px(dx + 9, dy + 11, 8, 3, '#f4e8dc');
+      // head
+      px(dx + 20, dy + 0, 14, 14, '#d4a574');
+      px(dx + 20, dy + 0, 4, 12, '#b88850');
+      px(dx + 28, dy + 2, 6, 7, '#e8c898');
+      px(dx + 29, dy + 3, 4, 4, '#f0d8b0');
+      // ear
+      px(dx + 18, dy + 4, 5, 9, '#a07040');
+      px(dx + 19, dy + 5, 3, 6, '#c09060');
+      px(dx + 19, dy + 5, 2, 2, '#d4a878');
+      // eye + nose + mouth
+      px(dx + 28, dy + 4, 3, 3, '#fff');
+      px(dx + 29, dy + 5, 2, 2, '#222');
+      px(dx + 29, dy + 5, 1, 1, '#fff');
+      px(dx + 32, dy + 7, 3, 2, '#333');
+      px(dx + 33, dy + 7, 1, 1, '#555');
+      px(dx + 28, dy + 9, 5, 2, '#c07070');
+      px(dx + 28, dy + 9, 5, 1, '#e09090');
+      // paws
+      px(dx + 18, dy + 16, 5, 5, '#c09060');
+      px(dx + 19, dy + 17, 3, 2, '#e0b888');
+      px(dx + 24, dy + 16, 5, 5, '#c09060');
+      px(dx + 25, dy + 17, 3, 2, '#e0b888');
+      // tail
+      px(dx - 8, dy + 12, 10, 4, '#d4a574');
+      px(dx - 8, dy + 12, 3, 4, '#b88850');
+      px(dx - 6, dy + 13, 6, 2, '#e0b888');
+      // ground contact shade
+      px(dx + 4, dy + 19, 22, 2, 'rgba(40,30,20,0.2)');
+      const hy = dy - 6 - Math.sin(heartPhase) * 3;
+      px(dx + 34, hy, 4, 4, '#e07090');
+      px(dx + 34, hy, 4, 1, '#f090a8');
+      px(dx + 40, hy - 4, 3, 3, '#e07090');
+    }
+
+    function drawParrot() {
+      const p = parrot;
+      if (p.x < -25 || p.x > IW + 25) return;
+      const x0 = Math.round(p.x), y = Math.round(p.y);
+      const flying = p.mode === 'fly' || p.mode === 'flee' || p.mode === 'return';
+      // 面向移動方向：往右 face=1，往左 face=-1
+      let face = 1;
+      if (flying) {
+        if ((p.vx || 0) < -0.15) face = -1;
+        else if ((p.vx || 0) > 0.15) face = 1;
+        else face = (p.tx >= p.x) ? 1 : -1;
+      } else {
+        face = 1; // 停肩看向右側（湖面／釣點）
+      }
+      const phase = p.wing;
+      let wingFrame = 0;
+      if (flying) {
+        const f = (Math.sin(phase) + 1) * 1.5;
+        wingFrame = f < 1 ? 0 : f < 2 ? 1 : 2;
+      } else {
+        wingFrame = Math.sin(phase) > 0.92 ? 1 : 0;
+      }
+
+      // 以身體中心為原點，水平鏡像
+      const P = (ox, oy, w, h, col) => {
+        if (face === 1) px(x0 + ox, y + oy, w, h, col);
+        else px(x0 - ox - w, y + oy, w, h, col);
+      };
+
+      // 陰影
+      if (!flying) P(0, 9, 7, 2, 'rgba(0,0,0,0.16)');
+      else P(1, 11, 5, 2, 'rgba(0,0,0,0.08)');
+
+      // 尾巴（身體後方 = 負 ox）
+      P(-5, 3, 5, 3, '#1e6b28');
+      P(-7, 4, 4, 2, '#c43c2a');
+      P(-8, 5, 3, 2, '#1a8a30');
+      P(-6, 3, 2, 1, '#2a9a3a');
+
+      // 身體
+      P(0, 1, 8, 7, '#228b32');
+      P(0, 1, 3, 7, '#1a6b24');
+      P(4, 1, 4, 4, '#32b044');
+      P(2, 3, 4, 3, '#2a9a3a');
+      P(1, 7, 6, 2, '#1a7a28');
+
+      // 翅膀
+      if (wingFrame === 0) {
+        P(1, 2, 5, 5, '#1a7a28');
+        P(2, 3, 3, 3, '#249030');
+      } else if (wingFrame === 1) {
+        P(-1, 0, 6, 4, '#1a7a28');
+        P(0, 1, 4, 3, '#249030');
+        P(-2, 2, 3, 2, '#0f5a1a');
+      } else {
+        P(-2, -3, 7, 3, '#1a7a28');
+        P(-1, -2, 5, 2, '#249030');
+        P(-3, -1, 4, 2, '#0f5a1a');
+        P(0, -4, 3, 2, '#3aba4a');
+      }
+
+      // 頭（前方）
+      P(6, -3, 6, 6, '#228b32');
+      P(7, -2, 4, 4, '#32b044');
+      P(6, -3, 2, 5, '#1a6b24');
+      P(9, -1, 2, 2, '#4aca58');
+      P(9, -2, 2, 2, '#fff');
+      P(10, -1, 1, 1, '#1a1a1a');
+      // 喙朝向面朝方向
+      P(12, -1, 3, 2, '#e8a020');
+      P(13, 0, 2, 1, '#c08010');
+      P(12, 0, 1, 1, '#f0c040');
+      P(8, -5, 2, 2, '#1a8a30');
+      P(9, -6, 1, 2, '#2a9a3a');
+
+      // 停棲腳
+      if (!flying) {
+        P(1, 8, 2, 3, '#d49820');
+        P(4, 8, 2, 3, '#d49820');
+        P(0, 10, 3, 1, '#b07810');
+        P(4, 10, 3, 1, '#b07810');
+      }
+    }
+
+    function updateParrot(dt) {
+      const p = parrot;
+      const badWeather = weather === 'rain' || weather === 'storm';
+      if (p.vx === undefined) { p.vx = 0; p.vy = 0; }
+
+      // 肩上位置：略偏後外側，圖層在人後方時只露出身體一角
+      const shoulderX = 108, shoulderY = 112;
+
+      if (badWeather && p.mode !== 'flee') {
+        p.mode = 'flee';
+        p.tx = -40;
+        p.ty = 18 + Math.random() * 25;
+      }
+      if (!badWeather && p.mode === 'flee' && p.x < -15) {
+        p.mode = 'return';
+        p.x = -20; p.y = 28 + Math.random() * 20;
+        p.tx = shoulderX; p.ty = shoulderY;
+      }
+
+      const easeToward = (spd) => {
+        const dx = p.tx - p.x, dy = p.ty - p.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const ax = (dx / dist) * spd;
+        const ay = (dy / dist) * spd;
+        p.vx = p.vx * 0.88 + ax * 0.12;
+        p.vy = p.vy * 0.88 + ay * 0.12;
+        const maxS = spd * 18;
+        const s = Math.sqrt(p.vx * p.vx + p.vy * p.vy) || 1;
+        if (s > maxS) { p.vx *= maxS / s; p.vy *= maxS / s; }
+        p.x += p.vx * dt * 0.06;
+        p.y += p.vy * dt * 0.06;
+        return dist;
+      };
+
+      if (p.mode === 'perch') {
+        p.wing += dt * 0.0035;
+        p.tx = shoulderX; p.ty = shoulderY;
+        p.x = shoulderX;
+        p.y = shoulderY + Math.sin(heartPhase * 0.8) * 0.35;
+        p.vx = 0.01; // 微正，讓面朝右
+        p.vy = 0;
+        p.nextFly -= dt;
+        if (p.nextFly <= 0 && !badWeather) {
+          p.mode = 'fly';
+          p.tx = 90 + Math.random() * 250;
+          p.ty = 28 + Math.random() * 45;
+          p.nextFly = 9000 + Math.random() * 12000;
+          p.vx = 0.5; p.vy = -0.4;
+        }
+      } else if (p.mode === 'fly') {
+        p.wing += dt * 0.018;
+        p.ty += Math.sin(p.wing * 0.35) * 0.04;
+        const dist = easeToward(0.55);
+        if (dist < 12) {
+          if (Math.random() < 0.4) {
+            p.mode = 'return';
+            p.tx = shoulderX; p.ty = shoulderY;
+          } else {
+            p.tx = 50 + Math.random() * 300;
+            p.ty = 22 + Math.random() * 50;
+          }
+        }
+      } else if (p.mode === 'flee') {
+        p.wing += dt * 0.022;
+        easeToward(0.85);
+        p.x -= dt * 0.03;
+      } else if (p.mode === 'return') {
+        p.wing += dt * 0.016;
+        p.tx = shoulderX; p.ty = shoulderY;
+        const dist = easeToward(0.6);
+        if (dist < 5) {
+          p.mode = 'perch';
+          p.x = shoulderX; p.y = shoulderY;
+          p.vx = 0.01; p.vy = 0;
+          p.nextFly = 8000 + Math.random() * 10000;
+        }
+      }
+    }
+
+    function drawPerson(castP, tipX, tipY) {
+      // 碼頭邊漁夫（原位置）+ 寫實草帽／背心細節
+      const px0 = 92, py = 116;
+
+      // ground contact shadow
+      px(px0, py + 32, 28, 3, 'rgba(20,30,40,0.25)');
+      px(px0 + 2, py + 34, 24, 2, 'rgba(20,30,40,0.12)');
+
+      // boots
+      px(px0 + 2, py + 28, 9, 5, '#3a2a1a');
+      px(px0 + 3, py + 28, 7, 2, '#5a4a2a');
+      px(px0 + 4, py + 29, 4, 1, '#7a6a4a');
+      px(px0 + 14, py + 28, 9, 5, '#3a2a1a');
+      px(px0 + 15, py + 28, 7, 2, '#5a4a2a');
+      px(px0 + 16, py + 29, 4, 1, '#7a6a4a');
+
+      // legs
+      px(px0 + 3, py + 16, 9, 13, '#4a5a3a');
+      px(px0 + 3, py + 16, 3, 13, '#3a4a2a');
+      px(px0 + 9, py + 18, 2, 4, '#2a3a1a');
+      px(px0 + 14, py + 16, 9, 13, '#4a5a3a');
+      px(px0 + 14, py + 16, 3, 13, '#3a4a2a');
+      px(px0 + 20, py + 18, 2, 4, '#2a3a1a');
+
+      // torso / vest
+      px(px0 + 4, py + 2, 18, 16, '#3a6a9a');
+      px(px0 + 4, py + 2, 5, 16, '#2a5a8a');
+      px(px0 + 14, py + 3, 7, 8, '#5a8ab8');
+      px(px0 + 3, py + 4, 20, 12, '#5a6a40');
+      px(px0 + 3, py + 4, 4, 12, '#4a5a30');
+      px(px0 + 16, py + 5, 6, 6, '#6a7a50');
+      px(px0 + 6, py + 8, 5, 5, '#3a4a28');
+      px(px0 + 13, py + 8, 5, 5, '#3a4a28');
+      px(px0 + 6, py + 8, 5, 1, '#7a8a60');
+      px(px0 + 13, py + 8, 5, 1, '#7a8a60');
+      px(px0 + 4, py + 15, 18, 3, '#5a3a1a');
+      px(px0 + 11, py + 15, 4, 3, '#c4a050');
+
+      // head
+      px(px0 + 7, py - 10, 13, 13, '#e8c4a0');
+      px(px0 + 7, py - 10, 3, 11, '#d4a888');
+      px(px0 + 15, py - 6, 4, 5, '#f0d4b0');
+      px(px0 + 6, py - 5, 2, 4, '#d4a888');
+      // two eyes (clearly visible)
+      px(px0 + 10, py - 6, 3, 3, '#fff');
+      px(px0 + 11, py - 5, 2, 2, '#2a2a2a');
+      px(px0 + 15, py - 6, 3, 3, '#fff');
+      px(px0 + 16, py - 5, 2, 2, '#2a2a2a');
+      // small smile
+      px(px0 + 12, py + 0, 6, 2, '#c4a888');
+      px(px0 + 13, py + 1, 4, 1, '#d08070');
+
+      // hat
+      px(px0 + 3, py - 12, 20, 4, '#e0c878');
+      px(px0 + 3, py - 12, 20, 1, '#f0e0a0');
+      px(px0 + 6, py - 19, 14, 8, '#e0c878');
+      px(px0 + 6, py - 19, 14, 2, '#f0e0a0');
+      px(px0 + 6, py - 12, 14, 2, '#c4a858');
+      px(px0 + 8, py - 17, 3, 3, '#8a7030');
+      px(px0 + 14, py - 17, 2, 2, '#6a8a4a');
+
+      // arm + cast
+      let armX = px0 + 20, armY = py + 7;
+      let handX = armX + 12, handY = armY + 2;
+      if (castP > 0 && castP < 1) {
+        if (castP < 0.35) {
+          const w = castP / 0.35;
+          handX = armX + 4 - w * 18;
+          handY = armY - w * 24;
+        } else {
+          const f = (castP - 0.35) / 0.65;
+          handX = armX - 14 + f * 40;
+          handY = armY - 24 + f * 30;
+        }
+      }
+      ctx.strokeStyle = '#3a6a9a';
+      ctx.lineWidth = 7;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(armX + 2, armY + 3);
+      ctx.lineTo((armX + handX) / 2, (armY + handY) / 2);
+      ctx.stroke();
+      ctx.strokeStyle = '#e8c4a0';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo((armX + handX) / 2, (armY + handY) / 2);
+      ctx.lineTo(handX, handY);
+      ctx.stroke();
+      px(handX - 2, handY - 2, 5, 5, '#e8c4a0');
+      px(handX - 1, handY - 1, 2, 2, '#d4a888');
+
+      // 更長寫實釣竿
+      ctx.strokeStyle = '#2a1a0a';
+      ctx.lineWidth = 2.8;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(handX, handY);
+      ctx.lineTo(tipX, tipY);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(180, 140, 70, 0.65)';
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.moveTo(handX, handY - 1.3);
+      ctx.lineTo(tipX, tipY - 1.3);
+      ctx.stroke();
+      // cork grip
+      const hx = handX + (tipX - handX) * 0.06;
+      const hy2 = handY + (tipY - handY) * 0.06;
+      ctx.strokeStyle = '#c4a070';
+      ctx.lineWidth = 4.2;
+      ctx.beginPath();
+      ctx.moveTo(handX, handY);
+      ctx.lineTo(hx, hy2);
+      ctx.stroke();
+      // reel
+      const rx = handX + (tipX - handX) * 0.1;
+      const ry = handY + (tipY - handY) * 0.1 + 3;
+      px(rx - 3, ry - 2, 7, 5, '#4a4a4a');
+      px(rx - 2, ry - 1, 5, 3, '#6a6a6a');
+      px(rx, ry, 2, 2, '#8a8a8a');
+      // guides along longer blank
+      for (let g = 0.18; g <= 0.9; g += 0.14) {
+        const gx = handX + (tipX - handX) * g;
+        const gy = handY + (tipY - handY) * g;
+        px(gx - 1, gy - 2, 3, 2, '#c0c0c0');
+        px(gx, gy - 1, 1, 1, '#fff');
+      }
+      px(tipX - 2, tipY - 2, 4, 4, '#3a2a10');
+      px(tipX - 1, tipY - 2, 2, 1, '#d4b070');
+      px(tipX, tipY - 1, 2, 2, '#e8d090');
+    }
+
+    function drawLineAndBobber(tipX, tipY, bobX, bobY) {
+      ctx.strokeStyle = 'rgba(240,240,240,0.85)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(bobX, bobY);
+      ctx.stroke();
+      // bobber volume
+      px(bobX - 3, bobY - 6, 6, 5, '#f5f5f5');
+      px(bobX - 3, bobY - 6, 6, 1, '#fff');
+      px(bobX - 3, bobY - 1, 6, 7, '#e74c3c');
+      px(bobX - 3, bobY - 1, 2, 7, '#c0392b');
+      px(bobX + 1, bobY, 2, 3, '#ff7a6a');
+      px(bobX - 1, bobY - 7, 2, 2, '#ddd');
+    }
+
+    function drawHugeShadow(cx, cy, intensity, time) {
+      // 水下巨大魚影（橢圓、緩緩移動）
+      const sway = Math.sin(time * 0.002) * 8;
+      const len = 70 + intensity * 40;
+      const thick = 18 + intensity * 12;
+      ctx.save();
+      ctx.translate(cx + sway, cy + 8);
+      ctx.rotate(Math.sin(time * 0.0015) * 0.12);
+      ctx.fillStyle = `rgba(10, 25, 40, ${0.18 + intensity * 0.35})`;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, len / 2, thick / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // 更暗的核心
+      ctx.fillStyle = `rgba(5, 15, 30, ${0.15 + intensity * 0.25})`;
+      ctx.beginPath();
+      ctx.ellipse(-len * 0.08, 0, len * 0.28, thick * 0.28, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // 尾部細長影
+      ctx.fillStyle = `rgba(10, 25, 40, ${0.12 + intensity * 0.2})`;
+      ctx.beginPath();
+      ctx.ellipse(-len * 0.42, 0, len * 0.18, thick * 0.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawRipples(cx, cy, intensity, time) {
+      if (intensity <= 0) return;
+      ctx.strokeStyle = `rgba(200,230,255,${0.25 + intensity * 0.4})`;
+      ctx.lineWidth = 1.5;
+      for (let i = 1; i <= 4; i++) {
+        const r = 6 + i * 7 + Math.sin(time * 0.01 + i) * 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy + 2, r * intensity, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+
+    function drawBubbles() {
+      bubbles.forEach(b => {
+        const a = Math.max(0, 1 - b.life);
+        px(b.x, b.y, b.s, b.s, `rgba(200,230,255,${a * 0.65})`);
+      });
+    }
+
+    // Pixel fish / trash
+    // Detailed side-view fish (WizardSmoke / pixel-fish style)
+    function drawPixelFish(x, y, fish, s) {
+      s = s || 1;
+      const isBig = fish.size === 'big';
+      const col = fish.color;
+      const fin = fish.fin || col;
+      const dark = lerpColor(col, '#000000', 0.28);
+      const light = lerpColor(col, '#ffffff', 0.22);
+      const belly = lerpColor(col, '#f5f0e0', 0.35);
+      const u = v => v * s; // unit scale
+
+      if (isBig) {
+        // elongated body (trout / carp profile)
+        px(x - u(14), y - u(4), u(28), u(10), col);
+        px(x - u(12), y - u(6), u(22), u(4), light); // back highlight
+        px(x - u(12), y + u(3), u(24), u(4), belly); // belly
+        px(x - u(14), y - u(2), u(3), u(8), dark); // rear shade
+        // head taper
+        px(x + u(12), y - u(3), u(8), u(8), col);
+        px(x + u(16), y - u(1), u(5), u(5), light);
+        // snout
+        px(x + u(20), y, u(4), u(3), belly);
+        // eye
+        px(x + u(16), y - u(2), u(3), u(3), '#fff');
+        px(x + u(17), y - u(1), u(2), u(2), '#1a1a1a');
+        px(x + u(17), y - u(1), u(1), u(1), '#fff');
+        // caudal (tail) fin forked
+        px(x - u(20), y - u(6), u(8), u(5), fin);
+        px(x - u(20), y + u(2), u(8), u(5), fin);
+        px(x - u(22), y - u(7), u(4), u(3), dark);
+        px(x - u(22), y + u(5), u(4), u(3), dark);
+        // dorsal fin
+        px(x - u(2), y - u(10), u(10), u(5), fin);
+        px(x, y - u(11), u(6), u(2), light);
+        // anal / pelvic
+        px(x - u(2), y + u(6), u(6), u(3), fin);
+        px(x + u(6), y + u(5), u(4), u(3), fin);
+        // gill line
+        px(x + u(10), y - u(3), u(1), u(7), dark);
+        // scale-ish mid dots
+        for (let i = 0; i < 4; i++) px(x - u(8) + i * u(5), y, u(2), u(1), light);
+      } else {
+        // small fish compact profile
+        px(x - u(8), y - u(3), u(16), u(7), col);
+        px(x - u(7), y - u(4), u(12), u(3), light);
+        px(x - u(7), y + u(2), u(13), u(3), belly);
+        px(x - u(8), y - u(1), u(2), u(5), dark);
+        // head
+        px(x + u(6), y - u(2), u(5), u(5), col);
+        px(x + u(9), y - u(1), u(3), u(3), light);
+        // eye
+        px(x + u(8), y - u(1), u(2), u(2), '#fff');
+        px(x + u(9), y, u(1), u(1), '#111');
+        // tail
+        px(x - u(12), y - u(4), u(5), u(4), fin);
+        px(x - u(12), y + u(1), u(5), u(4), fin);
+        px(x - u(14), y - u(3), u(3), u(2), dark);
+        px(x - u(14), y + u(3), u(3), u(2), dark);
+        // dorsal
+        px(x - u(1), y - u(6), u(5), u(3), fin);
+        // ventral
+        px(x + u(1), y + u(4), u(3), u(2), fin);
+        // gill
+        px(x + u(5), y - u(2), u(1), u(4), dark);
+      }
+    }
+
+
+
+    function drawPixelTurtle(x, y, turtle, s) {
+      s = s || 1;
+      const u = v => v * s;
+      const isBig = turtle.size === 'big';
+      const shell = turtle.shell || '#2a5a32';
+      const scute = turtle.scute || '#1a3a22';
+      const skin = turtle.skin || '#4a8a3a';
+      const belly = turtle.belly || '#d0c080';
+      const accent = turtle.accent || '#c04030';
+      const dark = '#0a1a10';
+      const light = lerpColor(shell, '#ffffff', 0.18);
+
+      if (isBig) {
+        // 大龜：厚背甲 + 長頸可伸
+        // 腹甲／身下
+        px(x - u(12), y + u(2), u(24), u(5), belly);
+        px(x - u(10), y + u(5), u(20), u(2), lerpColor(belly, '#000', 0.15));
+        // 背甲主體（圓拱）
+        px(x - u(14), y - u(6), u(28), u(12), shell);
+        px(x - u(12), y - u(8), u(24), u(4), light);
+        px(x - u(12), y + u(2), u(24), u(3), dark);
+        // 盾板分塊
+        px(x - u(8), y - u(5), u(7), u(6), scute);
+        px(x + u(1), y - u(5), u(7), u(6), scute);
+        px(x - u(4), y - u(7), u(8), u(4), lerpColor(scute, '#fff', 0.08));
+        px(x - u(10), y - u(2), u(5), u(4), scute);
+        px(x + u(5), y - u(2), u(5), u(4), scute);
+        // 甲縫
+        px(x - u(1), y - u(7), u(1), u(10), 'rgba(0,0,0,0.25)');
+        px(x - u(12), y - u(1), u(24), u(1), 'rgba(0,0,0,0.2)');
+        // 頭（側視伸出）
+        px(x + u(12), y - u(2), u(10), u(6), skin);
+        px(x + u(14), y - u(3), u(7), u(3), lerpColor(skin, '#fff', 0.15));
+        px(x + u(18), y - u(1), u(5), u(4), skin);
+        // 眼
+        px(x + u(20), y - u(1), u(3), u(3), '#fff');
+        px(x + u(21), y, u(2), u(2), '#1a1a1a');
+        // 耳斑／強調色
+        px(x + u(16), y, u(3), u(2), accent);
+        // 嘴
+        px(x + u(22), y + u(1), u(3), u(2), dark);
+        // 四肢
+        px(x - u(12), y + u(4), u(6), u(4), skin);
+        px(x - u(13), y + u(6), u(4), u(2), dark);
+        px(x + u(4), y + u(4), u(6), u(4), skin);
+        px(x + u(7), y + u(6), u(4), u(2), dark);
+        // 後肢
+        px(x - u(16), y + u(2), u(5), u(4), skin);
+        // 尾
+        px(x - u(18), y + u(1), u(4), u(2), skin);
+      } else {
+        // 小龜
+        px(x - u(7), y + u(1), u(14), u(4), belly);
+        px(x - u(8), y - u(4), u(16), u(8), shell);
+        px(x - u(7), y - u(5), u(14), u(3), light);
+        px(x - u(7), y + u(1), u(14), u(2), dark);
+        // 盾板
+        px(x - u(4), y - u(3), u(4), u(4), scute);
+        px(x + u(1), y - u(3), u(4), u(4), scute);
+        px(x - u(2), y - u(4), u(5), u(2), lerpColor(scute, '#fff', 0.1));
+        px(x - u(1), y - u(4), u(1), u(6), 'rgba(0,0,0,0.22)');
+        // 頭
+        px(x + u(7), y - u(2), u(6), u(5), skin);
+        px(x + u(9), y - u(2), u(4), u(2), lerpColor(skin, '#fff', 0.12));
+        px(x + u(11), y - u(1), u(3), u(3), skin);
+        px(x + u(12), y - u(1), u(2), u(2), '#fff');
+        px(x + u(13), y, u(1), u(1), '#111');
+        px(x + u(9), y + u(1), u(2), u(1), accent);
+        // 腳
+        px(x - u(7), y + u(3), u(4), u(3), skin);
+        px(x + u(2), y + u(3), u(4), u(3), skin);
+        px(x - u(9), y + u(2), u(3), u(2), skin);
+        // 尾
+        px(x - u(10), y + u(1), u(3), u(2), skin);
+      }
+    }
+
+    function drawPixelNessie(x, y, s) {
+      // 與小船相近體型（船長約 90px）：長頸雙峰、可並排小船的巨獸
+      s = s || 1;
+      const u = v => v * s;
+      const col = '#2a6348';
+      const mid = '#3a7a58';
+      const light = '#5a9a72';
+      const dark = '#1a4a32';
+      const wet = '#4a8a68';
+      const belly = '#3a6a50';
+
+      // 水下巨大陰影（襯托體型）
+      px(x - u(48), y + u(10), u(96), u(6), 'rgba(10,30,25,0.22)');
+      px(x - u(40), y + u(14), u(80), u(4), 'rgba(10,30,25,0.12)');
+
+      // 主軀幹（約船身長）
+      px(x - u(36), y - u(6), u(62), u(18), col);
+      px(x - u(34), y - u(10), u(56), u(6), light);
+      px(x - u(34), y + u(6), u(56), u(8), dark);
+      px(x - u(32), y - u(2), u(14), u(12), mid);
+      px(x - u(10), y - u(1), u(20), u(10), belly);
+      // 濕潤高光
+      px(x - u(20), y - u(8), u(8), u(3), wet);
+      px(x + u(4), y - u(7), u(6), u(2), wet);
+      px(x - u(6), y - u(6), u(4), u(2), 'rgba(200,255,220,0.15)');
+
+      // 經典雙峰（加高加寬）
+      px(x - u(22), y - u(22), u(18), u(18), col);
+      px(x - u(20), y - u(26), u(14), u(6), light);
+      px(x - u(21), y - u(14), u(16), u(6), mid);
+      px(x - u(18), y - u(24), u(4), u(4), wet);
+
+      px(x + u(0), y - u(24), u(20), u(20), col);
+      px(x + u(2), y - u(28), u(16), u(6), light);
+      px(x + u(1), y - u(16), u(18), u(6), mid);
+      px(x + u(6), y - u(26), u(5), u(3), wet);
+
+      // 長頸（高過船舷）
+      px(x + u(18), y - u(36), u(12), u(32), col);
+      px(x + u(19), y - u(36), u(4), u(30), light);
+      px(x + u(26), y - u(34), u(3), u(28), dark);
+      px(x + u(18), y - u(28), u(12), u(2), dark);
+      px(x + u(18), y - u(20), u(12), u(2), dark);
+      px(x + u(18), y - u(12), u(12), u(2), dark);
+
+      // 頭部（側視爬蟲）
+      px(x + u(22), y - u(48), u(22), u(14), col);
+      px(x + u(24), y - u(47), u(16), u(5), light);
+      px(x + u(22), y - u(38), u(18), u(4), dark);
+      // 吻部
+      px(x + u(40), y - u(44), u(10), u(8), mid);
+      px(x + u(42), y - u(43), u(7), u(4), light);
+      px(x + u(48), y - u(42), u(3), u(2), dark);
+      px(x + u(40), y - u(38), u(8), u(2), '#1a3020');
+      // 眼
+      px(x + u(32), y - u(45), u(5), u(5), '#f0e8a0');
+      px(x + u(33), y - u(44), u(3), u(3), '#1a1a0a');
+      px(x + u(33), y - u(44), u(1), u(1), '#fff');
+      // 耳脊
+      px(x + u(26), y - u(50), u(4), u(3), dark);
+      px(x + u(34), y - u(51), u(3), u(3), mid);
+
+      // 尾鰭（左右分叉，加長）
+      px(x - u(48), y - u(4), u(16), u(12), dark);
+      px(x - u(52), y - u(12), u(10), u(8), col);
+      px(x - u(52), y + u(6), u(10), u(8), col);
+      px(x - u(56), y - u(14), u(6), u(5), mid);
+      px(x - u(56), y + u(10), u(6), u(5), mid);
+      px(x - u(50), y - u(2), u(8), u(6), belly);
+
+      // 背脊骨節
+      for (let i = 0; i < 7; i++) {
+        px(x - u(28) + i * u(8), y - u(12), u(3), u(3), dark);
+        px(x - u(27) + i * u(8), y - u(13), u(2), u(1), mid);
+      }
+    }
+
+    function drawPixelTrash(x, y, trash, s) {
+      // 與圖鑑同風格的逼真像素垃圾（層次、高光、破損）
+      s = s || 1.25;
+      const u = v => v * s;
+      const t = trash.type;
+      // 共同水滴／濕痕
+      const wet = () => {
+        px(x - u(2), y + u(8), u(2), u(2), 'rgba(180,210,230,0.35)');
+        px(x + u(3), y + u(9), u(2), u(1), 'rgba(180,210,230,0.25)');
+      };
+      if (t === 'bottle') {
+        px(x - u(7), y - u(11), u(14), u(22), '#8ec8d8');
+        px(x - u(6), y - u(11), u(4), u(22), 'rgba(255,255,255,0.4)');
+        px(x + u(2), y - u(9), u(3), u(18), 'rgba(0,40,60,0.12)');
+        px(x - u(6), y - u(14), u(12), u(4), '#7ab8c8');
+        px(x - u(4), y - u(18), u(8), u(5), '#2a8a4a');
+        px(x - u(3), y - u(17), u(6), u(2), '#3aaa5a');
+        px(x - u(5), y - u(2), u(10), u(5), '#e8f4f8');
+        px(x - u(4), y - u(1), u(8), u(2), '#4a90c0');
+        px(x - u(6), y + u(9), u(12), u(3), '#6aa0b0');
+        px(x - u(5), y + u(4), u(2), u(3), 'rgba(40,80,60,0.2)'); // 污漬
+        wet();
+      } else if (t === 'bear') {
+        px(x - u(10), y - u(2), u(20), u(14), '#c4a06a');
+        px(x - u(9), y - u(1), u(8), u(6), '#d4b080');
+        px(x - u(9), y - u(12), u(7), u(10), '#c4a06a');
+        px(x + u(3), y - u(12), u(7), u(10), '#c4a06a');
+        px(x - u(8), y - u(10), u(4), u(4), '#a88850');
+        px(x + u(5), y - u(10), u(4), u(4), '#a88850');
+        px(x - u(4), y, u(3), u(3), '#3a2a1a');
+        px(x + u(2), y, u(3), u(3), '#3a2a1a');
+        px(x - u(1), y + u(3), u(4), u(2), '#8a6040');
+        px(x + u(5), y + u(4), u(5), u(3), '#8a7050'); // 破損縫
+        px(x - u(10), y + u(8), u(5), u(3), '#d8c8a8'); // 填充物
+        px(x - u(8), y + u(6), u(2), u(2), '#e8d8b8');
+        wet();
+      } else if (t === 'can') {
+        px(x - u(8), y - u(10), u(16), u(20), '#a8a8a8');
+        px(x - u(7), y - u(9), u(4), u(18), 'rgba(255,255,255,0.32)');
+        px(x + u(3), y - u(8), u(3), u(14), 'rgba(0,0,0,0.12)');
+        px(x - u(7), y - u(2), u(14), u(7), '#c0392b');
+        px(x - u(6), y - u(1), u(12), u(2), '#e74c3c');
+        px(x - u(8), y - u(12), u(16), u(3), '#d0d0d0');
+        px(x - u(5), y - u(14), u(10), u(3), '#909090');
+        px(x + u(1), y + u(5), u(5), u(4), '#707070'); // 凹痕
+        px(x - u(6), y + u(6), u(4), u(2), '#6a8a4a'); // 鏽斑
+        px(x + u(2), y - u(6), u(3), u(2), '#8a6a40');
+        wet();
+      } else if (t === 'bag') {
+        px(x - u(12), y - u(2), u(24), u(14), '#f2f2f2');
+        px(x - u(11), y - u(6), u(8), u(6), '#e8e8e8');
+        px(x + u(3), y - u(6), u(8), u(6), '#e8e8e8');
+        px(x - u(10), y + u(4), u(20), u(5), '#d0d0d0');
+        px(x - u(1), y - u(2), u(2), u(12), 'rgba(0,0,0,0.08)');
+        px(x + u(5), y, u(1), u(8), 'rgba(0,0,0,0.08)');
+        px(x - u(14), y, u(4), u(3), '#c8c8c8');
+        px(x + u(10), y, u(4), u(3), '#c8c8c8');
+        px(x - u(8), y + u(2), u(6), u(2), 'rgba(100,140,100,0.2)');
+        wet();
+      } else if (t === 'cloth') {
+        px(x - u(12), y - u(6), u(24), u(14), '#8b6b4a');
+        px(x - u(11), y - u(4), u(10), u(6), '#9b7b5a');
+        px(x + u(2), y + u(1), u(8), u(5), '#7b5b3a');
+        px(x - u(12), y + u(6), u(5), u(4), '#6b4b2a');
+        px(x + u(8), y + u(4), u(5), u(5), '#6b4b2a');
+        px(x - u(4), y - u(8), u(6), u(3), '#a08060');
+        px(x + u(4), y - u(2), u(3), u(2), 'rgba(0,0,0,0.12)');
+        wet();
+      } else if (t === 'tire') {
+        px(x - u(14), y - u(7), u(28), u(14), '#2a2a2a');
+        px(x - u(12), y - u(5), u(24), u(10), '#3a3a3a');
+        px(x - u(8), y - u(2), u(16), u(5), '#1a1a1a');
+        for (let i = 0; i < 5; i++) px(x - u(13) + i * u(5), y - u(7), u(3), u(2), '#444');
+        px(x - u(10), y + u(4), u(4), u(2), '#555');
+        px(x + u(4), y + u(4), u(4), u(2), '#555');
+        px(x - u(6), y + u(5), u(12), u(2), '#111');
+        wet();
+      } else if (t === 'cap') {
+        px(x - u(9), y - u(2), u(18), u(10), '#2a7ab8');
+        px(x - u(8), y - u(5), u(16), u(5), '#3a9ad8');
+        px(x - u(7), y, u(14), u(3), '#1a5a98');
+        px(x - u(5), y - u(3), u(3), u(3), '#fff');
+        px(x + u(2), y - u(3), u(3), u(3), '#ff6688');
+        px(x - u(2), y + u(2), u(4), u(2), '#0a3a68');
+        for (let i = 0; i < 4; i++) px(x - u(7) + i * u(4), y - u(5), u(1), u(2), 'rgba(255,255,255,0.25)');
+        wet();
+      } else if (t === 'mask') {
+        px(x - u(14), y - u(4), u(28), u(10), '#e8eef2');
+        px(x - u(12), y - u(2), u(10), u(7), '#c8d0d8');
+        px(x + u(2), y - u(2), u(10), u(7), '#c8d0d8');
+        px(x - u(18), y, u(6), u(3), '#a0a8b0');
+        px(x + u(12), y, u(6), u(3), '#a0a8b0');
+        px(x - u(6), y + u(2), u(12), u(2), '#9098a0');
+        px(x - u(4), y - u(6), u(8), u(3), '#d0d8e0');
+        px(x - u(10), y + u(3), u(4), u(2), 'rgba(80,100,80,0.2)');
+        wet();
+      } else if (t === 'slipper') {
+        px(x - u(14), y + u(2), u(28), u(8), '#5a4030');
+        px(x - u(13), y - u(2), u(26), u(6), '#7a5a40');
+        px(x - u(12), y - u(4), u(12), u(6), '#8a6a50');
+        px(x + u(2), y + u(4), u(10), u(5), '#4a3020');
+        px(x - u(10), y + u(6), u(8), u(3), '#3a2818');
+        px(x - u(8), y - u(1), u(6), u(2), '#9a7a60');
+        px(x + u(4), y + u(1), u(3), u(2), 'rgba(0,0,0,0.15)');
+        wet();
+      } else if (t === 'line') {
+        px(x - u(10), y - u(8), u(20), u(18), '#d8d0b0');
+        px(x - u(8), y - u(6), u(16), u(14), '#c8c0a0');
+        px(x - u(6), y - u(4), u(4), u(12), '#a09070');
+        px(x + u(2), y - u(4), u(4), u(12), '#a09070');
+        px(x - u(4), y, u(8), u(4), '#908060');
+        px(x - u(12), y + u(2), u(5), u(3), '#b0a890');
+        px(x + u(8), y - u(2), u(5), u(3), '#b0a890');
+        px(x - u(2), y - u(2), u(3), u(3), '#e0d8c0');
+        wet();
+      } else if (t === 'bowl') {
+        px(x - u(12), y - u(2), u(24), u(12), '#f0f0e8');
+        px(x - u(11), y - u(5), u(22), u(5), '#ffffff');
+        px(x - u(10), y, u(20), u(7), '#e0e0d0');
+        px(x - u(8), y + u(2), u(16), u(3), '#c0c0b0');
+        px(x - u(6), y - u(7), u(12), u(3), '#d0d0c0');
+        px(x - u(4), y + u(4), u(8), u(2), '#a0a090');
+        px(x - u(7), y - u(1), u(5), u(2), 'rgba(100,120,80,0.2)');
+        wet();
+      } else {
+        px(x - u(10), y - u(4), u(20), u(12), '#888');
+        px(x - u(8), y - u(2), u(16), u(8), '#aaa');
+        wet();
+      }
+    }
+
+    function drawPixelHugeFish(x, y, fish, s) {
+      s = s || 1.35;
+      const u = v => v * s;
+      const col = fish.color;
+      const fin = fish.fin || col;
+      const dark = lerpColor(col, '#000000', 0.32);
+      const light = lerpColor(col, '#ffffff', 0.2);
+      const belly = lerpColor(col, '#e8e0d0', 0.3);
+      // massive body
+      px(x - u(28), y - u(8), u(52), u(18), col);
+      px(x - u(24), y - u(11), u(42), u(6), light);
+      px(x - u(24), y + u(5), u(44), u(7), belly);
+      px(x - u(28), y - u(4), u(6), u(14), dark);
+      // head
+      px(x + u(20), y - u(6), u(14), u(14), col);
+      px(x + u(26), y - u(3), u(8), u(8), light);
+      px(x + u(30), y, u(6), u(5), belly);
+      // eye
+      px(x + u(26), y - u(4), u(4), u(4), '#fff');
+      px(x + u(27), y - u(3), u(2), u(2), '#111');
+      px(x + u(27), y - u(3), u(1), u(1), '#fff');
+      // forked tail huge
+      px(x - u(40), y - u(12), u(14), u(10), fin);
+      px(x - u(40), y + u(4), u(14), u(10), fin);
+      px(x - u(46), y - u(14), u(8), u(6), dark);
+      px(x - u(46), y + u(10), u(8), u(6), dark);
+      // dorsal
+      px(x - u(4), y - u(18), u(16), u(8), fin);
+      px(x, y - u(20), u(10), u(4), light);
+      // pectoral
+      px(x + u(8), y + u(8), u(10), u(5), fin);
+      // gill
+      px(x + u(16), y - u(5), u(2), u(12), dark);
+      // scale highlights
+      for (let i = 0; i < 6; i++) px(x - u(16) + i * u(6), y - u(1), u(3), u(2), light);
+    }
+
+    function drawPixelRuby(x, y, s) {
+      s = s || 1.2;
+      const u = v => v * s;
+      // faceted gem silhouette
+      // top facet
+      px(x - u(4), y - u(12), u(8), u(4), '#ff6a8a');
+      px(x - u(6), y - u(8), u(12), u(4), '#e02050');
+      // mid body
+      px(x - u(8), y - u(4), u(16), u(10), '#c01040');
+      px(x - u(6), y - u(2), u(6), u(8), '#ff4a70'); // left light
+      px(x + u(2), y, u(4), u(6), '#8a0028'); // right dark
+      // bottom point
+      px(x - u(5), y + u(6), u(10), u(4), '#a00830');
+      px(x - u(3), y + u(10), u(6), u(3), '#7a0020');
+      px(x - u(1), y + u(13), u(2), u(2), '#5a0018');
+      // specular highlight
+      px(x - u(4), y - u(6), u(3), u(3), '#ffb0c0');
+      px(x - u(3), y - u(5), u(1), u(1), '#fff');
+      // edge glints
+      px(x + u(4), y - u(2), u(2), u(2), '#ff8aa0');
+      px(x - u(7), y + u(2), u(2), u(2), '#ff6a8a');
+    }
+
+    function drawLoot(progress, loot) {
+      const baseX = 250, baseY = 168 - progress * 68;
+      if (!loot) return;
+      if (loot.type === 'trash') drawPixelTrash(baseX, baseY, loot.data, 1.15);
+      else if (loot.type === 'nessie') drawPixelNessie(baseX, baseY + 6, 1.15);
+      else if (loot.type === 'huge') drawPixelHugeFish(baseX, baseY, loot.data, 1.4);
+      else if (loot.type === 'ruby') drawPixelRuby(baseX, baseY, 1.35);
+      else if (loot.type === 'turtle') drawPixelTurtle(baseX, baseY, loot.data, loot.data.size === 'big' ? 1.25 : 1.1);
+      else drawPixelFish(baseX, baseY, loot.data, 1.2);
+    }
+
+    function drawLootPreview(loot) {
+      lootCtx.fillStyle = '#0a2840';
+      lootCtx.fillRect(0, 0, 80, 60);
+      // draw onto lootCtx by temporarily redirecting helpers is hard;
+      // use simplified detailed previews matching new style
+      const lx = 40, ly = 30;
+      if (loot.type === 'turtle') {
+        const td = loot.data;
+        const sh = td.shell || '#2a5a32', sc = td.scute || '#1a3a22', sk = td.skin || '#4a8a3a';
+        const bel = td.belly || '#d0c080', acc = td.accent || '#c04030';
+        lootCtx.fillStyle = bel; lootCtx.fillRect(lx-12, ly+4, 24, 6);
+        lootCtx.fillStyle = sh; lootCtx.fillRect(lx-14, ly-8, 28, 14);
+        lootCtx.fillStyle = sc; lootCtx.fillRect(lx-6, ly-5, 6, 6); lootCtx.fillRect(lx+2, ly-5, 6, 6);
+        lootCtx.fillStyle = sk; lootCtx.fillRect(lx+12, ly-4, 10, 7);
+        lootCtx.fillStyle = '#fff'; lootCtx.fillRect(lx+18, ly-2, 3, 3);
+        lootCtx.fillStyle = '#111'; lootCtx.fillRect(lx+19, ly-1, 2, 2);
+        lootCtx.fillStyle = acc; lootCtx.fillRect(lx+14, ly+1, 3, 2);
+        lootCtx.fillStyle = sk; lootCtx.fillRect(lx-12, ly+6, 6, 4); lootCtx.fillRect(lx+2, ly+6, 6, 4);
+      } else if (loot.type === 'ruby') {
+        // faceted ruby preview
+        lootCtx.fillStyle = '#ff6a8a'; lootCtx.fillRect(lx-4, ly-14, 8, 4);
+        lootCtx.fillStyle = '#e02050'; lootCtx.fillRect(lx-6, ly-10, 12, 5);
+        lootCtx.fillStyle = '#c01040'; lootCtx.fillRect(lx-8, ly-5, 16, 12);
+        lootCtx.fillStyle = '#ff4a70'; lootCtx.fillRect(lx-6, ly-3, 6, 8);
+        lootCtx.fillStyle = '#8a0028'; lootCtx.fillRect(lx+2, ly-1, 4, 6);
+        lootCtx.fillStyle = '#a00830'; lootCtx.fillRect(lx-5, ly+7, 10, 4);
+        lootCtx.fillStyle = '#7a0020'; lootCtx.fillRect(lx-3, ly+11, 6, 3);
+        lootCtx.fillStyle = '#ffb0c0'; lootCtx.fillRect(lx-4, ly-7, 3, 3);
+        lootCtx.fillStyle = '#fff'; lootCtx.fillRect(lx-3, ly-6, 1, 1);
+      } else if (loot.type === 'trash') {
+        const t = loot.data.type;
+        // 與圖鑑同配色的預覽
+        if (t === 'bottle') {
+          lootCtx.fillStyle = '#8ec8d8'; lootCtx.fillRect(lx-7, ly-12, 14, 22);
+          lootCtx.fillStyle = 'rgba(255,255,255,0.4)'; lootCtx.fillRect(lx-6, ly-12, 4, 22);
+          lootCtx.fillStyle = '#2a8a4a'; lootCtx.fillRect(lx-4, ly-18, 8, 5);
+          lootCtx.fillStyle = '#3aaa5a'; lootCtx.fillRect(lx-3, ly-17, 6, 2);
+          lootCtx.fillStyle = '#e8f4f8'; lootCtx.fillRect(lx-5, ly-2, 10, 5);
+          lootCtx.fillStyle = '#4a90c0'; lootCtx.fillRect(lx-4, ly-1, 8, 2);
+          lootCtx.fillStyle = '#6aa0b0'; lootCtx.fillRect(lx-6, ly+9, 12, 3);
+        } else if (t === 'bear') {
+          lootCtx.fillStyle = '#c4a06a';
+          lootCtx.fillRect(lx-10, ly-4, 20, 14);
+          lootCtx.fillRect(lx-9, ly-12, 7, 10); lootCtx.fillRect(lx+3, ly-12, 7, 10);
+          lootCtx.fillStyle = '#a88850'; lootCtx.fillRect(lx-8, ly-10, 4, 4); lootCtx.fillRect(lx+5, ly-10, 4, 4);
+          lootCtx.fillStyle = '#3a2a1a'; lootCtx.fillRect(lx-4, ly-1, 3, 3); lootCtx.fillRect(lx+2, ly-1, 3, 3);
+          lootCtx.fillStyle = '#d8c8a8'; lootCtx.fillRect(lx-10, ly+8, 5, 3);
+          lootCtx.fillStyle = '#8a7050'; lootCtx.fillRect(lx+5, ly+4, 5, 3);
+        } else if (t === 'can') {
+          lootCtx.fillStyle = '#a8a8a8'; lootCtx.fillRect(lx-8, ly-12, 16, 20);
+          lootCtx.fillStyle = 'rgba(255,255,255,0.3)'; lootCtx.fillRect(lx-7, ly-11, 4, 18);
+          lootCtx.fillStyle = '#c0392b'; lootCtx.fillRect(lx-7, ly-2, 14, 7);
+          lootCtx.fillStyle = '#e74c3c'; lootCtx.fillRect(lx-6, ly-1, 12, 2);
+          lootCtx.fillStyle = '#d0d0d0'; lootCtx.fillRect(lx-8, ly-14, 16, 3);
+          lootCtx.fillStyle = '#707070'; lootCtx.fillRect(lx+1, ly+5, 5, 4);
+        } else if (t === 'bag') {
+          lootCtx.fillStyle = '#f2f2f2'; lootCtx.fillRect(lx-12, ly-2, 24, 14);
+          lootCtx.fillStyle = '#e8e8e8'; lootCtx.fillRect(lx-11, ly-8, 8, 6); lootCtx.fillRect(lx+3, ly-8, 8, 6);
+          lootCtx.fillStyle = '#d0d0d0'; lootCtx.fillRect(lx-10, ly+4, 20, 5);
+        } else if (t === 'tire') {
+          lootCtx.fillStyle = '#2a2a2a'; lootCtx.fillRect(lx-14, ly-8, 28, 14);
+          lootCtx.fillStyle = '#3a3a3a'; lootCtx.fillRect(lx-12, ly-6, 24, 10);
+          lootCtx.fillStyle = '#1a1a1a'; lootCtx.fillRect(lx-8, ly-3, 16, 5);
+        } else if (t === 'cap') {
+          lootCtx.fillStyle = '#2a7ab8'; lootCtx.fillRect(lx-9, ly-3, 18, 10);
+          lootCtx.fillStyle = '#3a9ad8'; lootCtx.fillRect(lx-8, ly-6, 16, 5);
+          lootCtx.fillStyle = '#fff'; lootCtx.fillRect(lx-5, ly-4, 3, 3);
+          lootCtx.fillStyle = '#ff6688'; lootCtx.fillRect(lx+2, ly-4, 3, 3);
+        } else if (t === 'cloth') {
+          lootCtx.fillStyle = '#8b6b4a'; lootCtx.fillRect(lx-12, ly-7, 24, 14);
+          lootCtx.fillStyle = '#9b7b5a'; lootCtx.fillRect(lx-11, ly-5, 10, 6);
+          lootCtx.fillStyle = '#6b4b2a'; lootCtx.fillRect(lx-12, ly+5, 5, 4); lootCtx.fillRect(lx+8, ly+4, 5, 5);
+        } else if (t === 'mask') {
+          lootCtx.fillStyle = '#e8eef2'; lootCtx.fillRect(lx-14, ly-5, 28, 10);
+          lootCtx.fillStyle = '#c8d0d8'; lootCtx.fillRect(lx-12, ly-3, 10, 7); lootCtx.fillRect(lx+2, ly-3, 10, 7);
+          lootCtx.fillStyle = '#a0a8b0'; lootCtx.fillRect(lx-18, ly-1, 6, 3); lootCtx.fillRect(lx+12, ly-1, 6, 3);
+        } else if (t === 'slipper') {
+          lootCtx.fillStyle = '#5a4030'; lootCtx.fillRect(lx-14, ly+2, 28, 8);
+          lootCtx.fillStyle = '#7a5a40'; lootCtx.fillRect(lx-13, ly-2, 26, 6);
+          lootCtx.fillStyle = '#8a6a50'; lootCtx.fillRect(lx-12, ly-4, 12, 6);
+        } else if (t === 'line') {
+          lootCtx.fillStyle = '#d8d0b0'; lootCtx.fillRect(lx-10, ly-8, 20, 18);
+          lootCtx.fillStyle = '#c8c0a0'; lootCtx.fillRect(lx-8, ly-6, 16, 14);
+          lootCtx.fillStyle = '#a09070'; lootCtx.fillRect(lx-6, ly-4, 4, 12); lootCtx.fillRect(lx+2, ly-4, 4, 12);
+        } else if (t === 'bowl') {
+          lootCtx.fillStyle = '#f0f0e8'; lootCtx.fillRect(lx-12, ly-2, 24, 12);
+          lootCtx.fillStyle = '#fff'; lootCtx.fillRect(lx-11, ly-5, 22, 5);
+          lootCtx.fillStyle = '#e0e0d0'; lootCtx.fillRect(lx-10, ly, 20, 7);
+          lootCtx.fillStyle = '#c0c0b0'; lootCtx.fillRect(lx-8, ly+2, 16, 3);
+        } else {
+          lootCtx.fillStyle = '#888'; lootCtx.fillRect(lx-10, ly-4, 20, 12);
+          lootCtx.fillStyle = '#aaa'; lootCtx.fillRect(lx-8, ly-2, 16, 8);
+        }
+      } else if (loot.type === 'nessie') {
+        // 預覽：與船等長的巨獸剪影
+        lootCtx.fillStyle = 'rgba(10,30,25,0.25)';
+        lootCtx.fillRect(lx-36, ly+10, 72, 4);
+        lootCtx.fillStyle = '#2a6348';
+        lootCtx.fillRect(lx-28, ly-2, 48, 14);
+        lootCtx.fillStyle = '#5a9a72'; lootCtx.fillRect(lx-24, ly-5, 40, 4);
+        lootCtx.fillStyle = '#2a6348';
+        lootCtx.fillRect(lx-16, ly-16, 14, 14);
+        lootCtx.fillRect(lx+2, ly-18, 16, 16);
+        lootCtx.fillRect(lx+16, ly-30, 10, 26);
+        lootCtx.fillRect(lx+22, ly-38, 16, 11);
+        lootCtx.fillStyle = '#5a9a72'; lootCtx.fillRect(lx+24, ly-37, 10, 3);
+        lootCtx.fillStyle = '#f0e8a0'; lootCtx.fillRect(lx+30, ly-36, 4, 4);
+        lootCtx.fillStyle = '#111'; lootCtx.fillRect(lx+31, ly-35, 2, 2);
+        lootCtx.fillStyle = '#1a4a32';
+        lootCtx.fillRect(lx-38, ly, 12, 9);
+        lootCtx.fillRect(lx-42, ly-6, 7, 6);
+        lootCtx.fillRect(lx-42, ly+6, 7, 6);
+      } else if (loot.type === 'huge') {
+        const col = loot.data.color;
+        const fin = loot.data.fin || col;
+        lootCtx.fillStyle = col;
+        lootCtx.fillRect(lx-26, ly-8, 48, 16);
+        lootCtx.fillStyle = fin;
+        lootCtx.fillRect(lx-34, ly-12, 12, 8); lootCtx.fillRect(lx-34, ly+4, 12, 8);
+        lootCtx.fillRect(lx-4, ly-16, 14, 7);
+        lootCtx.fillStyle = '#fff'; lootCtx.fillRect(lx+18, ly-4, 4, 4);
+        lootCtx.fillStyle = '#111'; lootCtx.fillRect(lx+19, ly-3, 2, 2);
+      } else {
+        const isBig = loot.data.size === 'big';
+        const col = loot.data.color;
+        const fin = loot.data.fin || col;
+        lootCtx.fillStyle = col;
+        if (isBig) {
+          lootCtx.fillRect(lx-16, ly-5, 30, 11);
+          lootCtx.fillStyle = fin;
+          lootCtx.fillRect(lx-22, ly-7, 8, 5); lootCtx.fillRect(lx-22, ly+3, 8, 5);
+          lootCtx.fillRect(lx-2, ly-11, 10, 5);
+          lootCtx.fillStyle = '#fff'; lootCtx.fillRect(lx+12, ly-3, 3, 3);
+          lootCtx.fillStyle = '#111'; lootCtx.fillRect(lx+13, ly-2, 2, 2);
+        } else {
+          lootCtx.fillRect(lx-10, ly-4, 18, 8);
+          lootCtx.fillStyle = fin;
+          lootCtx.fillRect(lx-15, ly-5, 6, 4); lootCtx.fillRect(lx-15, ly+2, 6, 4);
+          lootCtx.fillRect(lx-1, ly-7, 5, 3);
+          lootCtx.fillStyle = '#fff'; lootCtx.fillRect(lx+6, ly-2, 2, 2);
+          lootCtx.fillStyle = '#111'; lootCtx.fillRect(lx+7, ly-1, 1, 1);
+        }
+      }
+    }
+
+    function draw(time) {
+      // 先清掉整張畫布，避免縮放後上下左右白邊／雨後殘影
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = '#7eb8d4';
+      ctx.fillRect(0, 0, W, H);
+
+      // 邊框留白同色
+      ctx.fillStyle = (typeof getSky === 'function') ? getSky(dayTime) : '#7eb8d4';
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.save();
+      const ox = viewOX, oy = viewOY;
+      // screen shake (pixels in screen space)
+      let shx = 0, shy = 0;
+      if (screenShake > 0.01) {
+        const mag = screenShake * 10 * scale;
+        shx = (Math.random() - 0.5) * mag;
+        shy = (Math.random() - 0.5) * mag;
+      }
+      ctx.translate(ox + shx, oy + shy);
+      ctx.scale(scale, scale);
+      // 裁切在遊戲解析度內
+      ctx.beginPath();
+      ctx.rect(0, 0, IW, IH);
+      ctx.clip();
+      px(0, 0, IW, IH, '#7eb8d4');
+
+      drawSky(dayTime);
+      drawClouds(dayTime);
+      drawBirds();
+      drawWater(dayTime);
+      // rain drawn later after world so it overlays
+      drawShore();
+      drawCabin();
+      drawReeds();
+      drawDock();
+      drawBoat();
+      drawDog();
+
+      // 竿尖／浮標基準（碼頭漁夫，竿更長）
+      let tipX = 210, tipY = 112;
+      let bobX = 270, bobY = 172;
+
+      if (state === 'casting') {
+        const p = castProgress;
+        if (p < 0.35) {
+          const w = p / 0.35;
+          tipX = 210 - w * 45;
+          tipY = 112 - w * 38;
+          bobX = 210 - w * 28;
+          bobY = 112 - w * 18;
+        } else {
+          const f = (p - 0.35) / 0.65;
+          tipX = 165 + f * 60;
+          tipY = 74 + f * 42;
+          bobX = 185 + f * 95;
+          bobY = 90 - Math.sin(f * Math.PI) * 52 + f * 82;
+          if (f > 0.85) bobY = 172;
+        }
+      } else if (state === 'waiting' || state === 'pulling') {
+        tipX = 215;
+        tipY = 110 + Math.sin(bobberPhase * 0.5) * 1.2;
+        bobX = 270;
+        bobY = 172 + Math.sin(bobberPhase) * 3.2;
+        if (state === 'pulling') {
+          const leg = currentLoot && (currentLoot.type === 'nessie' || currentLoot.type === 'ruby' || currentLoot.type === 'huge');
+          const amp = pullStruggle * (leg ? 1.4 : 1);
+          const struggle = pullStruggle > 0
+            ? (Math.sin(time * 0.05) * 12 + Math.sin(time * 0.11) * 8 + Math.sin(time * 0.23) * 4) * amp
+            : 0;
+          tipX = 215 + struggle * 0.4;
+          tipY = 110 + Math.sin(bobberPhase * 0.5) * 1.2 + struggle * 0.3;
+          bobX = 270 + struggle;
+          bobY = 172 - pullProgress * 65 + Math.abs(struggle) * 0.5;
+          // 掙扎水花
+          if (leg && Math.random() < 0.35) {
+            bubbles.push({
+              x: bobX + (Math.random() - 0.5) * 28,
+              y: bobY + 4 + Math.random() * 8,
+              r: 2 + Math.random() * 4,
+              life: 1
+            });
+          }
+        }
+      }
+
+      // 停肩：鸚鵡圖層在漁夫後面（先畫鳥再畫人，頭不會被擋）
+      // 飛行：畫在人物之上，比較像在天空
+      if (parrot.mode === 'perch') {
+        drawParrot();
+        drawPerson(castProgress, tipX, tipY);
+      } else {
+        drawPerson(castProgress, tipX, tipY);
+        drawParrot();
+      }
+      if (state === 'casting' || state === 'waiting' || state === 'pulling') {
+        drawLineAndBobber(tipX, tipY, bobX, bobY);
+      }
+      drawWeatherFX();
+      if (state === 'waiting' && nearFish) {
+        const intensity = Math.min(1, (waitElapsed - (waitTime - nearWindow)) / Math.max(1, nearWindow));
+        if (pendingLoot && (pendingLoot.type === 'huge' || pendingLoot.type === 'nessie')) {
+          drawHugeShadow(bobX, bobY + 6, intensity, time);
+        }
+        // 垃圾幾乎無感；小魚小；大魚明顯；超大型最大
+        let rippleScale = 1;
+        if (pendingLoot) {
+          if (pendingLoot.type === 'trash') rippleScale = 0.18;
+          else if (pendingLoot.type === 'small') rippleScale = 0.35;
+          else if (pendingLoot.type === 'turtle') rippleScale = pendingLoot.data && pendingLoot.data.size === 'big' ? 0.85 : 0.5;
+          else if (pendingLoot.type === 'big') rippleScale = 0.9;
+          else rippleScale = 1.15; // huge / nessie / ruby
+        }
+        drawRipples(bobX, bobY + 2, (0.5 + intensity * 0.5) * rippleScale, time);
+      }
+      drawBubbles();
+      if (state === 'pulling') {
+        drawLoot(pullProgress, currentLoot);
+        if (currentLoot && (currentLoot.type === 'nessie' || currentLoot.type === 'ruby' || currentLoot.type === 'huge')) {
+          const p = pullProgress;
+          const bx = 270, by = 172 - p * 65;
+          // 連續水環
+          const phases = [0, 0.33, 0.66];
+          phases.forEach((off, i) => {
+            const ph = (time * 0.004 + off) % 1;
+            const rad = 8 + ph * 28 + i * 4;
+            ctx.strokeStyle = 'rgba(200,230,255,' + (0.35 * (1 - ph)) + ')';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.ellipse(bx, by + 6, rad, rad * 0.35, 0, 0, Math.PI * 2);
+            ctx.stroke();
+          });
+          // 線繃緊高光
+          if (pullStruggle > 0.8) {
+            ctx.strokeStyle = 'rgba(255,255,220,' + (0.25 + 0.2 * Math.sin(time * 0.03)) + ')';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(215, 110);
+            ctx.lineTo(bx, by);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // 整體景深：前景略暗、中景保持、天際微霧
+      ctx.fillStyle = 'rgba(15,25,40,0.08)';
+      ctx.fillRect(0, IH - 22, IW, 22);
+      ctx.fillStyle = 'rgba(200,220,240,0.04)';
+      ctx.fillRect(0, 0, IW, 40);
+      // 碼頭前方微陰影帶
+      ctx.fillStyle = 'rgba(0,0,0,0.06)';
+      ctx.fillRect(40, 150, 200, 6);
+
+      ctx.restore();
+    }
+
+    // ========== Logic ==========
+    function setStatus(t) { document.getElementById('status-box').textContent = t; }
+    function updateStreakUI() {
+      const el = document.getElementById('streak-box');
+      if (!el) return;
+      if (quizStreak >= 2) {
+        el.textContent = '連對 ×' + quizStreak + (quizStreak >= 3 ? ' 加成' : '');
+        el.classList.add('show');
+      } else {
+        el.classList.remove('show');
+      }
+    }
+
+    function startCast() {
+      if (state !== 'idle') return;
+      if (document.getElementById('question-modal').classList.contains('show') ||
+          document.getElementById('result-modal').classList.contains('show') ||
+          document.getElementById('collection-modal').classList.contains('show') ||
+          document.getElementById('achievement-modal').classList.contains('show') ||
+          document.getElementById('bait-modal').classList.contains('show')) return;
+      state = 'casting';
+      castProgress = 0;
+      nearFish = false;
+      bubbles = [];
+      setStatus('揮竿中…');
+      document.getElementById('instruction').style.display = 'none';
+      AudioSys.cast();
+      stats.casts = (stats.casts || 0) + 1;
+      saveStats();
+      unlockAch('first_cast');
+      if (stats.casts >= 10) unlockAch('cast_10');
+      if (stats.casts >= 30) unlockAch('cast_30');
+    }
+
+    function beginWaiting() {
+      state = 'waiting';
+      waitElapsed = 0;
+      bobberPhase = 0;
+      const usedBait = consumeActiveBait();
+      pendingLoot = rollLoot(usedBait); // 預先決定，才能顯示巨大影子
+      if (usedBait) {
+        setStatus('使用' + BAIT_DEFS[usedBait].name + '…');
+      }
+      // 依體型拉開等待時間
+      const t = pendingLoot.type;
+      if (t === 'trash') waitTime = 4000 + Math.random() * 4000;       // 4–8s
+      else if (t === 'small') waitTime = 7000 + Math.random() * 8000;  // 7–15s
+      else if (t === 'turtle') waitTime = 8000 + Math.random() * 9000; // 8–17s
+      else if (t === 'big') waitTime = 10000 + Math.random() * 10000;  // 10–20s
+      else if (t === 'huge' || t === 'nessie') waitTime = 14000 + Math.random() * 12000; // 14–26s
+      else waitTime = 12000 + Math.random() * 10000; // ruby etc
+      nearWindow = t === 'trash' ? 1800 : t === 'small' ? 3000 : t === 'turtle' ? 3500 : t === 'big' ? 4500 : 5500;
+      // 可收竿窗口：垃圾短、大魚／大龜長
+      let biteMs = 5000;
+      if (t === 'trash') biteMs = 3000;
+      else if (t === 'small') biteMs = 4500;
+      else if (t === 'turtle') biteMs = (pendingLoot.data && pendingLoot.data.size === 'big') ? 6500 : 5000;
+      else if (t === 'big') biteMs = 6000;
+      else if (t === 'huge' || t === 'nessie') biteMs = 7000;
+      else biteMs = 5500;
+      pendingBiteMs = biteMs;
+      biteReady = false;
+      biteTimer = 0;
+      setStatus('等待中…');
+      const wb = document.getElementById('wait-bar-wrap');
+      const bar = document.getElementById('wait-bar');
+      if (wb) wb.classList.add('show');
+      if (bar) { bar.style.width = '0%'; bar.classList.remove('ready'); }
+      const tip = document.getElementById('idle-tip');
+      if (tip) tip.classList.remove('show');
+      AudioSys.splash(false);
+    }
+
+    function rollLoot(bait) {
+      let r = Math.random();
+      // 基礎：垃圾46% / 小魚34% / 龜5% / 大魚8% / 超大5% / ???1% / 紅寶石0.1%
+      // 魚餌偏移機率
+      if (bait === 'worm') {
+        // 蟲蟲餌：垃圾降到 ~15%，小魚與烏龜上升
+        if (r < 0.15) return { type: 'trash', data: TRASH_ITEMS[Math.floor(Math.random()*TRASH_ITEMS.length)] };
+        if (r < 0.72) {
+          const s = FRESHWATER_FISH.filter(f => f.size === 'small');
+          return { type: 'small', data: s[Math.floor(Math.random()*s.length)] };
+        }
+        if (r < 0.88) return { type: 'turtle', data: TURTLES[Math.floor(Math.random()*TURTLES.length)] };
+        if (r < 0.96) {
+          const b = FRESHWATER_FISH.filter(f => f.size === 'big');
+          return { type: 'big', data: b[Math.floor(Math.random()*b.length)] };
+        }
+        if (r < 0.995) return { type: 'huge', data: HUGE_FISH[Math.floor(Math.random()*HUGE_FISH.length)] };
+        if (r < 0.999) return { type: 'nessie', data: { name: '???', desc: '傳說中的尼斯湖水怪竟然出現在這裡！！！' } };
+        return { type: 'ruby', data: { name: '紅寶石', desc: '極為罕見的湖底紅寶石！在陽光下閃著深紅色的光。' } };
+      }
+      if (bait === 'spark') {
+        // 閃亮餌：大魚／大龜明顯上升，垃圾降低
+        if (r < 0.22) return { type: 'trash', data: TRASH_ITEMS[Math.floor(Math.random()*TRASH_ITEMS.length)] };
+        if (r < 0.48) {
+          const s = FRESHWATER_FISH.filter(f => f.size === 'small');
+          return { type: 'small', data: s[Math.floor(Math.random()*s.length)] };
+        }
+        if (r < 0.58) return { type: 'turtle', data: TURTLES[Math.floor(Math.random()*TURTLES.length)] };
+        if (r < 0.88) {
+          const b = FRESHWATER_FISH.filter(f => f.size === 'big');
+          return { type: 'big', data: b[Math.floor(Math.random()*b.length)] };
+        }
+        if (r < 0.97) return { type: 'huge', data: HUGE_FISH[Math.floor(Math.random()*HUGE_FISH.length)] };
+        if (r < 0.995) return { type: 'nessie', data: { name: '???', desc: '傳說中的尼斯湖水怪竟然出現在這裡！！！' } };
+        return { type: 'ruby', data: { name: '紅寶石', desc: '極為罕見的湖底紅寶石！在陽光下閃著深紅色的光。' } };
+      }
+      if (bait === 'myth') {
+        // 傳說餌：超大型／???／紅寶石大增
+        if (r < 0.20) return { type: 'trash', data: TRASH_ITEMS[Math.floor(Math.random()*TRASH_ITEMS.length)] };
+        if (r < 0.45) {
+          const s = FRESHWATER_FISH.filter(f => f.size === 'small');
+          return { type: 'small', data: s[Math.floor(Math.random()*s.length)] };
+        }
+        if (r < 0.52) return { type: 'turtle', data: TURTLES[Math.floor(Math.random()*TURTLES.length)] };
+        if (r < 0.68) {
+          const b = FRESHWATER_FISH.filter(f => f.size === 'big');
+          return { type: 'big', data: b[Math.floor(Math.random()*b.length)] };
+        }
+        if (r < 0.90) return { type: 'huge', data: HUGE_FISH[Math.floor(Math.random()*HUGE_FISH.length)] };
+        if (r < 0.97) return { type: 'nessie', data: { name: '???', desc: '傳說中的尼斯湖水怪竟然出現在這裡！！！' } };
+        return { type: 'ruby', data: { name: '紅寶石', desc: '極為罕見的湖底紅寶石！在陽光下閃著深紅色的光。' } };
+      }
+      // 無魚餌
+      if (r < 0.46) return { type: 'trash', data: TRASH_ITEMS[Math.floor(Math.random()*TRASH_ITEMS.length)] };
+      if (r < 0.80) {
+        const s = FRESHWATER_FISH.filter(f => f.size === 'small');
+        return { type: 'small', data: s[Math.floor(Math.random()*s.length)] };
+      }
+      if (r < 0.85) return { type: 'turtle', data: TURTLES[Math.floor(Math.random()*TURTLES.length)] };
+      if (r < 0.93) {
+        const b = FRESHWATER_FISH.filter(f => f.size === 'big');
+        return { type: 'big', data: b[Math.floor(Math.random()*b.length)] };
+      }
+      if (r < 0.989) return { type: 'huge', data: HUGE_FISH[Math.floor(Math.random()*HUGE_FISH.length)] };
+      if (r < 0.999) return { type: 'nessie', data: { name: '???', desc: '傳說中的尼斯湖水怪竟然出現在這裡！！！' } };
+      return { type: 'ruby', data: { name: '紅寶石', desc: '極為罕見的湖底紅寶石！在陽光下閃著深紅色的光。' } };
+    }
+
+    function startPull() {
+      state = 'pulling';
+      pullProgress = 0;
+      pullFxTimer = 0;
+      currentLoot = pendingLoot || rollLoot();
+      pendingLoot = null;
+      const t = currentLoot && currentLoot.type;
+      const isNessie = t === 'nessie';
+      const isRuby = t === 'ruby';
+      const isHuge = t === 'huge';
+      const isLegend = isNessie || isRuby;
+      const isBigTurtle = t === 'turtle' && currentLoot.data && currentLoot.data.size === 'big';
+
+      // 收線時長：傳說 5～10 秒掙扎；超大型 3～5 秒；其餘短
+      if (isLegend) {
+        pullDurationMs = 5000 + Math.random() * 5000; // 5–10s
+        pullStruggle = isNessie ? 1.35 : 1.15;
+        screenShake = 1.2;
+        setStatus(isNessie ? '??? 全力掙扎中！！' : '紅寶石狂閃拉扯！！');
+      } else if (isHuge) {
+        pullDurationMs = 3000 + Math.random() * 2000; // 3–5s
+        pullStruggle = 1.0;
+        screenShake = 1.0;
+        setStatus('超大魚拉扯中！！');
+      } else if (isBigTurtle) {
+        pullDurationMs = 2200 + Math.random() * 1000;
+        pullStruggle = 0.55;
+        screenShake = 0.45;
+        setStatus('大龜慢拉中…');
+      } else if (t === 'big') {
+        pullDurationMs = 1400 + Math.random() * 400;
+        pullStruggle = 0.35;
+        screenShake = 0.35;
+        setStatus('中魚了！！');
+      } else {
+        pullDurationMs = 900 + Math.random() * 300;
+        pullStruggle = 0;
+        screenShake = 0.25;
+        setStatus(t === 'turtle' ? '釣到烏龜！' : '中魚了！！');
+      }
+
+      AudioSys.reel();
+      if (isLegend || isHuge) {
+        setTimeout(() => AudioSys.reel(), 180);
+        setTimeout(() => AudioSys.splash(true), 320);
+        setTimeout(() => AudioSys.reel(), 500);
+        setTimeout(() => AudioSys.splash(true), 900);
+        if (isLegend) {
+          setTimeout(() => AudioSys.reel(), 1400);
+          setTimeout(() => AudioSys.splash(true), 2000);
+        }
+        try {
+          if (navigator.vibrate) {
+            navigator.vibrate(isLegend
+              ? [50, 40, 50, 40, 80, 50, 50, 40, 100, 60, 50]
+              : [40, 60, 40, 80, 50, 100, 40]);
+          }
+        } catch (e) {}
+      } else if (isBigTurtle) {
+        try { if (navigator.vibrate) navigator.vibrate([50, 80, 50, 80, 50]); } catch (e) {}
+      } else {
+        try { if (navigator.vibrate) navigator.vibrate(30); } catch (e) {}
+      }
+    }
+
+    function finishPull() {
+      state = 'result';
+      // 脫鉤：垃圾 5%、小魚 8%、大魚 12%、超大型 18%、傳說 10%
+      let escapeChance = 0.08;
+      if (currentLoot.type === 'trash') escapeChance = 0.05;
+      else if (currentLoot.type === 'small') escapeChance = 0.08;
+      else if (currentLoot.type === 'turtle') escapeChance = currentLoot.data && currentLoot.data.size === 'big' ? 0.14 : 0.09;
+      else if (currentLoot.type === 'big') escapeChance = 0.12;
+      else if (currentLoot.type === 'huge') escapeChance = 0.18;
+      else if (currentLoot.type === 'nessie') escapeChance = 0.10;
+      else if (currentLoot.type === 'ruby') escapeChance = 0.15;
+      if (Math.random() < escapeChance) {
+        // 超大型／傳說／紅寶石：給搶救機會
+        const canSave = currentLoot.type === 'huge' || currentLoot.type === 'nessie' || currentLoot.type === 'ruby';
+        if (canSave) {
+          beginEscapeSave();
+          return;
+        }
+        showEscapeResult();
+        return;
+      }
+      completeCatch();
+    }
+
+    function beginEscapeSave() {
+      escapeSaveActive = true;
+      setStatus('要脫鉤了！快點！');
+      const p = document.getElementById('save-prompt');
+      if (p) p.style.display = 'block';
+      clearTimeout(escapeSaveTimer);
+      escapeSaveTimer = setTimeout(() => {
+        if (escapeSaveActive) {
+          escapeSaveActive = false;
+          if (p) p.style.display = 'none';
+          showEscapeResult();
+        }
+      }, 1800);
+    }
+
+    function tryEscapeSave() {
+      if (!escapeSaveActive) return false;
+      escapeSaveActive = false;
+      biteReady = false;
+      biteTimer = 0;
+      clearTimeout(escapeSaveTimer);
+      const p = document.getElementById('save-prompt');
+      if (p) p.style.display = 'none';
+      setStatus('搶救成功！！');
+      AudioSys.catchOK(true);
+      completeCatch();
+      return true;
+    }
+
+    function completeCatch() {
+      const isNew = markCollected(currentLoot);
+      if (isNew) showNewCatchFlash(currentLoot);
+      // 任務進度
+      ensureMissionDay();
+      if (currentLoot.type === 'trash') missionState.trash++;
+      if (currentLoot.type === 'big' || currentLoot.type === 'huge') missionState.big++;
+      saveMission();
+      updateMissionUI();
+      if (currentLoot.type === 'trash') {
+        AudioSys.trash();
+        showLootResult();
+      } else if (currentLoot.type === 'ruby') {
+        AudioSys.catchOK(true);
+        showRubyResult();
+      } else {
+        AudioSys.catchOK(currentLoot.type === 'huge' || currentLoot.type === 'nessie');
+        const isQuestionFish = Math.random() < 0.5;
+        if (isQuestionFish) showQuestionFlow();
+        else showFishOnlyResult();
+      }
+    }
+
+    function showEscapeResult() {
+      const modal = document.getElementById('result-modal');
+      document.getElementById('result-title').textContent = '脫鉤了…';
+      document.getElementById('loot-desc').innerHTML = '差一點！線一鬆就跑掉～<br><span style="opacity:0.8;font-size:12px;">水花還在，但鉤上已空。稀有物更容易脫鉤！</span>';
+      const lc = document.getElementById('loot-preview').getContext('2d');
+      lc.clearRect(0,0,80,60); lc.fillStyle='#0a2030'; lc.fillRect(0,0,80,60);
+      lc.fillStyle='#6a8aaa'; lc.font='12px sans-serif'; lc.textAlign='center'; lc.fillText('～', 40, 34);
+      document.getElementById('ok-btn').onclick = () => { modal.classList.remove('show'); resetToIdle(); };
+      modal.classList.add('show');
+      setStatus('脫鉤');
+      AudioSys.wrong();
+      stats.escapes = (stats.escapes || 0) + 1;
+      saveStats();
+      checkAchievements();
+    }
+
+    function showNewCatchFlash(loot) {
+      const el = document.getElementById('newcatch-flash');
+      if (!el) return;
+      let name = loot.data && loot.data.name ? loot.data.name : (loot.type === 'nessie' ? '???' : '新發現');
+      el.innerHTML = '✨ 新圖鑑！<br><span style="font-size:14px;">' + name + '</span>';
+      el.style.opacity = '1';
+      setTimeout(() => { el.style.opacity = '0'; }, 1800);
+    }
+
+    function showLootResult() {
+      const modal = document.getElementById('result-modal');
+      document.getElementById('result-title').textContent = '釣到垃圾…';
+      document.getElementById('loot-desc').innerHTML = '<b>' + currentLoot.data.name + '</b><br>' + currentLoot.data.desc + '<br><span style="opacity:0.8;font-size:12px;">+0 分（但算任務進度）</span>';
+      drawLootPreview(currentLoot);
+      document.getElementById('ok-btn').onclick = () => { modal.classList.remove('show'); resetToIdle(); };
+      modal.classList.add('show');
+    }
+
+    function showFishOnlyResult() {
+      const modal = document.getElementById('result-modal');
+      let title = '小魚上鉤！';
+      const pts = lootPoints(currentLoot.type, currentLoot.data);
+      if (currentLoot.type === 'turtle') title = (currentLoot.data.size === 'big' ? '大龜上鉤！' : '小龜上鉤！');
+      else if (currentLoot.type === 'big') title = '大魚上鉤！';
+      else if (currentLoot.type === 'huge') title = '超大型魚！！';
+      else if (currentLoot.type === 'nessie') title = '??? 傳說生物！！';
+      fishCaught += pts;
+      document.getElementById('score-box').textContent = '魚獲 ' + fishCaught;
+      saveGameSave();
+      document.getElementById('result-title').textContent = title;
+      let desc = '<b>' + currentLoot.data.name + '</b>';
+      if (currentLoot.data.desc) desc += '<br>' + currentLoot.data.desc;
+      desc += '<br><span style="opacity:0.85;font-size:12px;">+' + pts + ' 分 · 普通魚獲，沒有題目～</span>';
+      document.getElementById('loot-desc').innerHTML = desc;
+      drawLootPreview(currentLoot);
+      document.getElementById('ok-btn').onclick = () => { modal.classList.remove('show'); resetToIdle(); };
+      modal.classList.add('show');
+    }
+
+    function showRubyResult() {
+      const modal = document.getElementById('result-modal');
+      const pts = lootPoints('ruby', null);
+      fishCaught += pts;
+      document.getElementById('score-box').textContent = '魚獲 ' + fishCaught;
+      saveGameSave();
+      document.getElementById('result-title').textContent = '💎 紅寶石！！';
+      document.getElementById('loot-desc').innerHTML = '<b>紅寶石</b><br>' + currentLoot.data.desc + '<br><span style="color:#ffb0c0;">+' + pts + ' 分 · 機率僅 0.1%！</span>';
+      drawLootPreview(currentLoot);
+      document.getElementById('ok-btn').onclick = () => { modal.classList.remove('show'); resetToIdle(); };
+      modal.classList.add('show');
+    }
+
+    function showQuestionFlow() {
+      const modal = document.getElementById('result-modal');
+      const pts = lootPoints(currentLoot.type, currentLoot.data);
+      fishCaught += pts;
+      if (currentLoot.type === 'nessie') {
+        document.getElementById('result-title').textContent = '??? 傳說生物！！';
+        document.getElementById('loot-desc').innerHTML = '你釣到了 <b>???</b>！+' + pts + ' 分<br>準備回答終極問題…';
+      } else if (currentLoot.type === 'huge') {
+        document.getElementById('result-title').textContent = '超大型魚！！';
+        document.getElementById('loot-desc').innerHTML = '<b>' + currentLoot.data.name + '</b> +' + pts + ' 分<br>' + (currentLoot.data.desc || '') + '<br>它變成了一道商研社題目！';
+      } else if (currentLoot.type === 'turtle') {
+        document.getElementById('result-title').textContent = currentLoot.data.size === 'big' ? '大龜上鉤！' : '小龜上鉤！';
+        document.getElementById('loot-desc').innerHTML = '<b>' + currentLoot.data.name + '</b> +' + pts + ' 分<br>這隻烏龜變成了一道商研社題目！';
+      } else {
+        document.getElementById('result-title').textContent = currentLoot.type === 'big' ? '大魚上鉤！' : '小魚上鉤！';
+        document.getElementById('loot-desc').innerHTML = '<b>' + currentLoot.data.name + '</b> +' + pts + ' 分<br>它變成了一道商研社題目！';
+      }
+      document.getElementById('score-box').textContent = '魚獲 ' + fishCaught;
+      saveGameSave();
+      drawLootPreview(currentLoot);
+      document.getElementById('ok-btn').onclick = () => { modal.classList.remove('show'); showQuestion(); };
+      modal.classList.add('show');
+    }
+
+    function showQuestion() {
+      let available = questions.map((_, i) => i).filter(i => !answered.has(i));
+      if (available.length === 0) { answered.clear(); available = questions.map((_, i) => i); }
+      const idx = available[Math.floor(Math.random() * available.length)];
+      const base = questions[idx];
+      // 打亂選項順序，並重算正確答案索引
+      const order = base.options.map((_, i) => i);
+      for (let i = order.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+      }
+      const shuffledOpts = order.map(i => base.options[i]);
+      const newAnswer = order.indexOf(base.answer);
+      let tag = base.tag || '';
+      if (!tag) {
+        const qq = base.q;
+        if (qq.indexOf('MECE') >= 0) tag = '本週社課 · MECE';
+        else if (qq.indexOf('費米') >= 0) tag = '本週社課 · 費米';
+        else if (qq.indexOf('簡報') >= 0) tag = '本週社課 · 簡報';
+        else if (qq.indexOf('競品') >= 0) tag = '本週社課 · 競品分析';
+        else if (qq.indexOf('產業') >= 0 || qq.indexOf('波特') >= 0) tag = '本週社課 · 產業分析';
+        else if (qq.indexOf('Prime') >= 0 || qq.indexOf('一頁') >= 0) tag = '本週社課 · Prime';
+        else if (qq.indexOf('假設') >= 0 || qq.indexOf('個案') >= 0 || qq.indexOf('洞察') >= 0) tag = '本週社課 · 分析思維';
+        else tag = '本週社課相關';
+      }
+      currentQ = { q: base.q, options: shuffledOpts, answer: newAnswer, explain: base.explain, idx, tag };
+
+      document.getElementById('q-text').innerHTML = (currentQ.tag ? '<span style="color:#ffd780;font-size:12px;">' + currentQ.tag + '</span><br>' : '') + currentQ.q;
+      const optionsDiv = document.getElementById('options');
+      optionsDiv.innerHTML = '';
+      document.getElementById('result-msg').textContent = '';
+      document.getElementById('close-btn').style.display = 'none';
+      showingResult = false;
+      currentQ.options.forEach((opt, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'option-btn';
+        btn.textContent = (i+1) + '. ' + opt;
+        btn.onclick = () => selectAnswer(i);
+        optionsDiv.appendChild(btn);
+      });
+      document.getElementById('question-modal').classList.add('show');
+    }
+
+    function selectAnswer(selected) {
+      if (showingResult) return;
+      showingResult = true;
+      document.querySelectorAll('.option-btn').forEach((b, i) => {
+        b.disabled = true;
+        if (i === currentQ.answer) b.classList.add('correct');
+        else if (i === selected) b.classList.add('wrong');
+      });
+      const msg = document.getElementById('result-msg');
+      const tagLine = currentQ.tag ? ('【' + currentQ.tag + '】') : '';
+      stats.quizAnswered = (stats.quizAnswered || 0) + 1;
+      if (currentQ.tag) {
+        stats.quizTags = stats.quizTags || {};
+        stats.quizTags[currentQ.tag] = true;
+      }
+      if (selected === currentQ.answer) {
+        quizStreak = (quizStreak || 0) + 1;
+        updateStreakUI();
+        let bonus = 2 + (quizStreak >= 3 ? 2 : 0); // 連對3題再+2
+        fishCaught += bonus;
+        document.getElementById('score-box').textContent = '魚獲 ' + fishCaught;
+        let streakTxt = quizStreak >= 2 ? (' 連對×' + quizStreak) : '';
+        if (quizStreak >= 3) streakTxt += ' 加成!';
+        msg.textContent = '✅ 答對了！+' + bonus + ' 魚獲' + streakTxt + '  ' + tagLine + (currentQ.explain || '');
+        msg.style.color = '#7fff7f';
+        answered.add(currentQ.idx);
+        stats.quizCorrect = (stats.quizCorrect || 0) + 1;
+        ensureMissionDay();
+        missionState.quizOk++;
+        saveMission();
+        updateMissionUI();
+        saveGameSave();
+        AudioSys.correct();
+      } else {
+        quizStreak = 0;
+        updateStreakUI();
+        msg.textContent = '❌ 答錯了～ 不扣分  ' + tagLine + (currentQ.explain || '');
+        msg.style.color = '#ff9f9f';
+        stats.quizWrong = (stats.quizWrong || 0) + 1;
+        AudioSys.wrong();
+      }
+      saveStats();
+      checkAchievements();
+      document.getElementById('close-btn').style.display = 'inline-block';
+    }
+
+    document.getElementById('close-btn').onclick = () => {
+      document.getElementById('question-modal').classList.remove('show');
+      resetToIdle();
+    };
+
+    function resetToIdle() {
+      state = 'idle';
+      nearFish = false;
+      bubbles = [];
+      currentLoot = null;
+      castProgress = 0;
+      screenShake = 0;
+      pullStruggle = 0;
+      escapeSaveActive = false;
+      biteReady = false;
+      biteTimer = 0;
+      clearTimeout(escapeSaveTimer);
+      const p = document.getElementById('save-prompt');
+      if (p) p.style.display = 'none';
+      const wb = document.getElementById('wait-bar-wrap');
+      if (wb) wb.classList.remove('show');
+      const bar = document.getElementById('wait-bar');
+      if (bar) {
+        bar.style.width = '0%';
+        bar.classList.remove('ready');
+      }
+      setStatus('準備中');
+      document.getElementById('instruction').style.display = 'none';
+      const tip = document.getElementById('idle-tip');
+      if (tip) tip.classList.add('show');
+    }
+
+    // Collection UI
+    function getRarity(ent) {
+      if (ent.isNessie || ent.isRuby || ent.isHuge) return { key: 'legend', label: '傳說', cls: 'r-legend' };
+      if (ent.kind === '大魚' || ent.kind === '大龜') return { key: 'rare', label: '稀有', cls: 'r-rare' };
+      if (ent.isTrash) return { key: 'common', label: '普通', cls: 'r-common' };
+      return { key: 'common', label: '普通', cls: 'r-common' };
+    }
+
+    function getAllEntries() {
+      const entries = [];
+      FRESHWATER_FISH.forEach(f => entries.push({ key: 'fish_'+f.name, name: f.name, kind: f.size==='big'?'大魚':'小魚', filter: f.size, isNessie:false, isTrash:false, isHuge:false, isRuby:false, isTurtle:false, data:f }));
+      TURTLES.forEach(t => entries.push({ key: 'turtle_'+t.name, name: t.name, kind: t.size==='big'?'大龜':'小龜', filter: 'turtle', isNessie:false, isTrash:false, isHuge:false, isRuby:false, isTurtle:true, data:t }));
+      HUGE_FISH.forEach(f => entries.push({ key: 'fish_'+f.name, name: f.name, kind: '超大型', filter: 'huge', isNessie:false, isTrash:false, isHuge:true, isRuby:false, isTurtle:false, data:f }));
+      TRASH_ITEMS.forEach(t => entries.push({ key: 'trash_'+t.name, name: t.name, kind: '垃圾', filter: 'trash', isNessie:false, isTrash:true, isHuge:false, isRuby:false, isTurtle:false, data:t }));
+      entries.push({ key: 'nessie', name: '???', kind: '傳說', filter: 'legend', isNessie:true, isTrash:false, isHuge:false, isRuby:false, data:null });
+      entries.push({ key: 'ruby', name: '紅寶石', kind: '傳說', filter: 'legend', isNessie:false, isTrash:false, isHuge:false, isRuby:true, data:{ name:'紅寶石' } });
+      return entries;
+    }
+
+    function buildCollectionList() {
+      const listEl = document.getElementById('collection-list');
+      const statsEl = document.getElementById('collection-stats');
+      listEl.innerHTML = '';
+      const entries = getAllEntries();
+      let found = 0, foundSmall=0, totalSmall=0, foundBig=0, totalBig=0, foundHuge=0, totalHuge=0, foundTrash=0, totalTrash=0, foundLeg=0, totalLeg=0;
+      entries.forEach(ent => {
+        const unlocked = !!collection[ent.key];
+        if (unlocked) found++;
+        if (ent.filter === 'small') { totalSmall++; if (unlocked) foundSmall++; }
+        else if (ent.filter === 'big') { totalBig++; if (unlocked) foundBig++; }
+        else if (ent.filter === 'huge') { totalHuge++; if (unlocked) foundHuge++; }
+        else if (ent.filter === 'trash') { totalTrash++; if (unlocked) foundTrash++; }
+        else if (ent.filter === 'legend') { totalLeg++; if (unlocked) foundLeg++; }
+        else if (ent.filter === 'turtle') { /* counted in found total */ }
+      });
+      const filtered = entries.filter(ent => {
+        if (colFilter === 'all') return true;
+        return ent.filter === colFilter;
+      });
+      filtered.forEach(ent => {
+        const unlocked = !!collection[ent.key];
+        const rarity = getRarity(ent);
+        const div = document.createElement('div');
+        div.className = 'col-item' + (unlocked ? '' : ' locked');
+        const cnv = document.createElement('canvas');
+        cnv.className = 'col-icon';
+        cnv.width = 52; cnv.height = 36;
+        const c = cnv.getContext('2d');
+        c.imageSmoothingEnabled = false;
+        c.fillStyle = '#0a2840'; c.fillRect(0,0,52,36);
+        const p = (x,y,w,h,col) => { c.fillStyle = col; c.fillRect(x|0,y|0,Math.max(1,w|0),Math.max(1,h|0)); };
+        const mix = (a,b,t) => {
+          const ph = s => { const h=parseInt(s.slice(1),16); return [(h>>16)&255,(h>>8)&255,h&255]; };
+          const A=ph(a), B=ph(b.length===7?b:'#888888');
+          return 'rgb('+[0,1,2].map(i=>Math.round(A[i]+(B[i]-A[i])*t)).join(',')+')';
+        };
+        if (unlocked) {
+          if (ent.isNessie) {
+            p(4,18,34,11,'#2f6b4e'); p(6,16,30,4,'#5a9a72'); p(6,25,30,4,'#1e4a35');
+            p(12,8,11,12,'#2f6b4e'); p(14,6,7,3,'#5a9a72');
+            p(24,7,12,13,'#2f6b4e'); p(26,5,8,3,'#5a9a72');
+            p(34,2,8,16,'#2f6b4e'); p(36,1,3,14,'#5a9a72');
+            p(38,0,12,9,'#2f6b4e'); p(42,1,6,3,'#5a9a72');
+            p(44,2,3,3,'#f0e8a0'); p(45,3,2,2,'#111');
+            p(0,16,7,8,'#1e4a35'); p(0,14,4,4,'#2f6b4e'); p(0,22,4,4,'#2f6b4e');
+          } else if (ent.isRuby) {
+            p(22,4,8,4,'#ff6a8a'); p(20,8,12,5,'#e02050'); p(18,13,16,12,'#c01040');
+            p(20,14,6,8,'#ff4a70'); p(28,16,4,6,'#8a0028');
+            p(20,25,12,4,'#a00830'); p(22,29,8,3,'#7a0020');
+            p(21,12,3,3,'#ffb0c0'); p(22,13,1,1,'#fff');
+          } else if (ent.isTrash) {
+            const t = ent.data.type;
+            if (t==='bottle') {
+              p(18,10,16,22,'#8ec8d8'); p(20,10,4,22,'rgba(255,255,255,0.35)');
+              p(20,6,12,5,'#7ab8c8'); p(22,2,8,5,'#2a8a4a'); p(23,3,6,2,'#3aaa5a');
+              p(20,18,12,4,'#e8f4f8'); p(19,28,14,3,'#6aa0b0');
+            } else if (t==='bear') {
+              p(14,16,24,16,'#c4a06a'); p(16,8,8,10,'#c4a06a'); p(28,8,8,10,'#c4a06a');
+              p(18,10,4,4,'#a88850'); p(30,10,4,4,'#a88850');
+              p(20,18,3,3,'#3a2a1a'); p(28,18,3,3,'#3a2a1a'); p(23,22,5,2,'#8a6040');
+              p(12,28,6,3,'#d8c8a8'); p(34,20,6,4,'#8a7050');
+            } else if (t==='can') {
+              p(16,8,20,24,'#a8a8a8'); p(17,9,4,20,'rgba(255,255,255,0.3)');
+              p(18,14,16,8,'#c0392b'); p(19,15,14,2,'#e74c3c');
+              p(16,6,20,3,'#d0d0d0'); p(20,4,12,3,'#909090');
+              p(24,24,6,4,'#707070');
+            } else if (t==='bag') {
+              p(10,14,32,16,'#f2f2f2'); p(12,10,8,6,'#e8e8e8'); p(30,10,8,6,'#e8e8e8');
+              p(12,18,28,6,'#d0d0d0'); p(22,12,2,14,'rgba(0,0,0,0.08)');
+              p(8,16,4,3,'#c8c8c8'); p(40,16,4,3,'#c8c8c8');
+            } else if (t==='cloth') {
+              p(10,12,32,16,'#8b6b4a'); p(12,14,12,6,'#9b7b5a'); p(28,18,10,5,'#7b5b3a');
+              p(8,22,6,4,'#6b4b2a'); p(36,20,6,5,'#6b4b2a'); p(18,10,8,4,'#a08060');
+            } else if (t==='tire') {
+              p(8,10,36,18,'#2a2a2a'); p(12,13,28,12,'#3a3a3a'); p(16,16,20,6,'#1a1a1a');
+              for(let i=0;i<5;i++) p(10+i*7,10,4,3,'#444');
+              p(14,22,4,3,'#555'); p(30,22,4,3,'#555');
+            } else if (t==='cap') {
+              p(14,16,24,12,'#2a7ab8'); p(16,12,20,6,'#3a9ad8'); p(18,18,16,4,'#1a5a98');
+              p(20,14,3,3,'#fff'); p(28,14,3,3,'#ff6688'); p(24,20,4,2,'#0a3a68');
+            } else if (t==='mask') {
+              p(10,14,32,12,'#e8eef2'); p(12,16,12,8,'#c8d0d8'); p(28,16,12,8,'#c8d0d8');
+              p(4,18,8,3,'#a0a8b0'); p(40,18,8,3,'#a0a8b0');
+              p(18,20,16,3,'#9098a0'); p(22,12,8,4,'#d0d8e0');
+            } else if (t==='slipper') {
+              p(8,18,36,10,'#5a4030'); p(10,16,32,6,'#7a5a40'); p(12,14,12,6,'#8a6a50');
+              p(28,20,12,6,'#4a3020'); p(14,22,8,3,'#3a2818');
+            } else if (t==='line') {
+              p(16,10,20,20,'#d8d0b0'); p(18,12,16,16,'#c8c0a0');
+              p(20,14,4,12,'#a09070'); p(26,14,4,12,'#a09070'); p(22,18,8,4,'#908060');
+              p(12,20,6,3,'#b0a890'); p(34,16,6,3,'#b0a890');
+            } else if (t==='bowl') {
+              p(12,14,28,14,'#f0f0e8'); p(14,12,24,6,'#fff'); p(16,16,20,8,'#e0e0d0');
+              p(18,18,16,3,'#c0c0b0'); p(20,10,12,4,'#d0d0c0');
+              p(22,20,8,2,'#a0a090');
+            } else {
+              p(12,12,28,14,'#888'); p(14,14,24,10,'#aaa');
+            }
+          } else if (ent.isTurtle) {
+            const td = ent.data;
+            const sh = td.shell || '#2a5a32', sc = td.scute || '#1a3a22', sk = td.skin || '#4a8a3a';
+            const bel = td.belly || '#d0c080', acc = td.accent || '#c04030';
+            if (td.size === 'big') {
+              p(8,18,36,8,bel); p(6,10,40,14,sh); p(10,8,32,4,'#4a7a4a');
+              p(14,12,10,8,sc); p(26,12,10,8,sc); p(22,10,8,4,sc);
+              p(40,12,10,8,sk); p(46,14,4,4,'#fff'); p(47,15,2,2,'#111');
+              p(42,16,4,2,acc); p(8,22,8,4,sk); p(28,22,8,4,sk);
+            } else {
+              p(12,18,28,6,bel); p(10,12,32,10,sh); p(14,10,24,4,'#4a7a4a');
+              p(16,14,8,6,sc); p(26,14,8,6,sc);
+              p(36,14,10,7,sk); p(42,15,3,3,'#fff'); p(43,16,2,2,'#111');
+              p(38,18,3,2,acc); p(12,22,6,3,sk); p(28,22,6,3,sk);
+            }
+          } else if (ent.isHuge) {
+            const col = ent.data.color, fin = ent.data.fin||col;
+            p(4,12,40,14,col); p(36,12,12,12,col); p(40,13,3,3,'#fff');
+            p(0,8,8,8,fin); p(0,20,8,8,fin);
+          } else {
+            const col = ent.data.color, fin = ent.data.fin||col;
+            const isBig = ent.data.size==='big';
+            if (isBig) {
+              p(8,12,30,12,col); p(32,13,10,9,col); p(36,13,3,3,'#fff');
+              p(2,8,8,6,fin); p(2,20,8,6,fin);
+            } else {
+              p(12,13,24,10,col); p(30,14,8,7,col); p(32,14,2,2,'#fff');
+              p(6,10,7,5,fin); p(6,20,7,5,fin);
+            }
+          }
+        } else {
+          p(12,10,28,16,'#1a2a3a');
+          c.fillStyle='#3a4a5a'; c.font='16px monospace'; c.textAlign='center'; c.fillText('?',26,22);
+        }
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'col-name';
+        nameSpan.textContent = ent.isNessie ? (unlocked ? '???（尼斯湖水怪）' : '???') : (unlocked ? ent.name : '???');
+        const tag = document.createElement('span');
+        tag.className = 'col-tag';
+        tag.innerHTML = unlocked
+          ? (ent.kind + ' ×' + (collection[ent.key].count||1) + ' <span class="col-rarity ' + rarity.cls + '">' + rarity.label + '</span>')
+          : '未發現';
+        div.appendChild(cnv); div.appendChild(nameSpan); div.appendChild(tag);
+        listEl.appendChild(div);
+      });
+      statsEl.innerHTML = '已發現 <b>' + found + ' / ' + entries.length + '</b><br>' +
+        '<span style="font-size:11px;opacity:0.9;">垃' + foundTrash + '/' + totalTrash +
+        ' · 小' + foundSmall + '/' + totalSmall +
+        ' · 大' + foundBig + '/' + totalBig +
+        ' · 巨' + foundHuge + '/' + totalHuge +
+        ' · 傳' + foundLeg + '/' + totalLeg + '</span>';
+      const bar = document.getElementById('col-progress-bar');
+      if (bar) bar.style.width = (entries.length ? (found / entries.length * 100) : 0) + '%';
+      const share = document.getElementById('share-box');
+      if (share) {
+        share.style.display = 'block';
+        share.textContent = '我在商研社碼頭收錄了 ' + found + '/' + entries.length + ' 種！歡迎來社博攤位一起釣魚～';
+      }
+    }
+
+    function openCollection() { buildCollectionList(); document.getElementById('collection-modal').classList.add('show'); }
+    function closeCollection() { document.getElementById('collection-modal').classList.remove('show'); }
+
+    function pointerToGame(e) {
+      const rect = canvas.getBoundingClientRect();
+      const src = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || e;
+      // 螢幕像素 → canvas 內部像素
+      const sx = (src.clientX - rect.left) * (W / Math.max(1, rect.width));
+      const sy = (src.clientY - rect.top) * (H / Math.max(1, rect.height));
+      // 還原邏輯座標（含 view 偏移與縮放）
+      return {
+        x: (sx - viewOX) / scale,
+        y: (sy - viewOY) / scale
+      };
+    }
+
+    let lastPointerTs = 0;
+    function onPointer(e) {
+      try {
+        e.preventDefault();
+        // 避免 touch + click 連點兩次
+        const now = Date.now();
+        if (now - lastPointerTs < 280) return;
+        lastPointerTs = now;
+
+        if (!gameStarted) return;
+        if (tryEscapeSave()) return;
+
+        // 點肩上鸚鵡（小範圍，失敗不擋拋竿）
+        if (state === 'idle' && parrot && parrot.mode === 'perch') {
+          const p = pointerToGame(e);
+          if (Math.abs(p.x - parrot.x) < 16 && Math.abs(p.y - parrot.y) < 14) {
+            parrot.wing += 2;
+            const sy = parrot.y;
+            parrot.y = sy - 3;
+            setTimeout(() => { if (parrot.mode === 'perch') parrot.y = sy; }, 200);
+            setStatus('鸚鵡：咕咕！');
+            stats.parrotPet = true; saveStats(); checkAchievements();
+            try { if (navigator.vibrate) navigator.vibrate(20); } catch (err) {}
+            return;
+          }
+        }
+
+        // 有動靜：收竿
+        if (state === 'waiting' && biteReady) {
+          biteReady = false;
+          const wb = document.getElementById('wait-bar-wrap');
+          if (wb) wb.classList.remove('show');
+          startPull();
+          return;
+        }
+
+        // 等待中提前點：nearFish 可收，否則空竿
+        if (state === 'waiting' && !biteReady) {
+          if (nearFish) {
+            biteReady = false;
+            const wb = document.getElementById('wait-bar-wrap');
+            if (wb) wb.classList.remove('show');
+            startPull();
+          } else {
+            state = 'result';
+            pendingLoot = null;
+            const wb = document.getElementById('wait-bar-wrap');
+            if (wb) wb.classList.remove('show');
+            const modal = document.getElementById('result-modal');
+            document.getElementById('result-title').textContent = '空竿…';
+            document.getElementById('loot-desc').innerHTML = '收太早了，水面幾乎沒動靜。<br><span style="opacity:0.85;font-size:12px;">等進度條變金色、「有動靜」再點！</span>';
+            const lc = document.getElementById('loot-preview').getContext('2d');
+            lc.clearRect(0,0,80,60); lc.fillStyle='#0a2030'; lc.fillRect(0,0,80,60);
+            document.getElementById('ok-btn').onclick = () => { modal.classList.remove('show'); resetToIdle(); };
+            modal.classList.add('show');
+            setStatus('空竿');
+          }
+          return;
+        }
+
+        if (state === 'idle') startCast();
+      } catch (err) {
+        console.error(err);
+        if (state === 'idle') try { startCast(); } catch (e2) {}
+      }
+    }
+    canvas.addEventListener('pointerdown', onPointer, { passive: false });
+    window.addEventListener('pagehide', saveGameSave);
+    window.addEventListener('beforeunload', saveGameSave);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) saveGameSave(); });
+
+    document.getElementById('start-btn').onclick = () => {
+      document.getElementById('start-screen').style.display = 'none';
+      gameStarted = true;
+      document.getElementById('instruction').style.display = 'none';
+      document.getElementById('collection-btn').style.display = 'block';
+      const muteBtn = document.getElementById('mute-btn');
+      if (muteBtn) muteBtn.style.display = 'block';
+      const resetBtn = document.getElementById('reset-btn');
+      if (resetBtn) resetBtn.style.display = 'block';
+      const achBtn = document.getElementById('ach-btn');
+      if (achBtn) achBtn.style.display = 'block';
+      const zoomBtn = document.getElementById('zoom-btn');
+      if (zoomBtn) zoomBtn.style.display = 'block';
+      updateMissionUI();
+      updateStreakUI();
+      updateBaitUI();
+      document.getElementById('score-box').textContent = '魚獲 ' + fishCaught;
+      const tip = document.getElementById('idle-tip');
+      if (tip) tip.classList.add('show');
+      const bb = document.getElementById('bait-btn');
+      if (bb) bb.style.display = 'block';
+      updateBaitUI();
+      // 短教學：自動出現後消失
+      const toast = document.getElementById('tutorial-toast');
+      if (toast && !tutorialShown) {
+        toast.style.display = 'block';
+        toast.style.opacity = '1';
+        tutorialShown = true;
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          setTimeout(() => { toast.style.display = 'none'; }, 500);
+        }, 4500);
+      }
+      // iOS：必須在使用者手勢內解鎖音訊
+      try {
+        AudioSys.resume();
+        setTimeout(() => { try { AudioSys.startBgm(); } catch(e) {} }, 60);
+        setTimeout(() => { try { AudioSys.resume(); } catch(e) {} }, 300);
+      } catch (e) {}
+      lastTime = performance.now();
+      requestAnimationFrame(loop);
+    };
+    // 首次任意觸控再解鎖一次（雙保險）
+    let audioUnlocked = false;
+    function unlockAudioOnce() {
+      if (audioUnlocked) return;
+      audioUnlocked = true;
+      try { AudioSys.resume(); if (gameStarted) AudioSys.startBgm(); } catch(e) {}
+    }
+    document.addEventListener('touchstart', unlockAudioOnce, { passive: true, once: true });
+    document.addEventListener('click', unlockAudioOnce, { once: true });
+    document.getElementById('collection-btn').onclick = (e) => { e.stopPropagation(); openCollection(); };
+    document.getElementById('bait-btn').onclick = (e) => { e.stopPropagation(); openBait(); };
+    document.getElementById('bait-close-btn').onclick = (e) => { e.stopPropagation(); closeBait(); };
+    document.getElementById('bait-unequip-btn').onclick = (e) => {
+      e.stopPropagation();
+      activeBait = null;
+      saveBait();
+      updateBaitUI();
+      showBaitToast('已取消裝備魚餌');
+    };
+    document.getElementById('bait-modal').onclick = (e) => { if (e.target.id === 'bait-modal') closeBait(); };
+    document.getElementById('ach-btn').onclick = (e) => { e.stopPropagation(); openAchievements(); };
+    document.getElementById('ach-close-btn').onclick = (e) => { e.stopPropagation(); closeAchievements(); };
+    document.getElementById('achievement-modal').onclick = (e) => { if (e.target.id === 'achievement-modal') closeAchievements(); };
+    document.getElementById('col-tabs').addEventListener('click', (e) => {
+      const btn = e.target.closest('.col-tab');
+      if (!btn) return;
+      e.stopPropagation();
+      colFilter = btn.getAttribute('data-filter') || 'all';
+      document.querySelectorAll('.col-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      buildCollectionList();
+    });
+    document.getElementById('zoom-btn').onclick = (e) => {
+      e.stopPropagation();
+      if (sceneZoom < 1.15) {
+        sceneZoom = 1.28;
+        e.target.textContent = '放大';
+      } else {
+        sceneZoom = 1.0;
+        e.target.textContent = '標準';
+      }
+      // force rescale
+      W = 0; resize();
+    };
+    document.getElementById('reset-btn').onclick = (e) => {
+      e.stopPropagation();
+      if (!confirm('確定清除魚獲、圖鑑與答題進度？')) return;
+      try {
+        localStorage.removeItem(SAVE_KEY);
+        localStorage.removeItem(COLLECTION_KEY);
+        localStorage.removeItem(ACH_KEY);
+        localStorage.removeItem('shangyan_stats_v1');
+        localStorage.removeItem('shangyan_bait_v1');
+        localStorage.removeItem('shangyan_mission_v1');
+      } catch (err) {}
+      baitInv = { worm: 0, spark: 0, myth: 0 };
+      activeBait = null;
+      window._baitRewardDate = '';
+      updateBaitUI();
+      collection = {};
+      fishCaught = 0;
+      answered = new Set();
+      achievementsUnlocked = {};
+      stats = { casts:0, escapes:0, trash:0, small:0, big:0, huge:0, turtles:0, quizAnswered:0, quizCorrect:0, quizWrong:0, newUnlocks:0, sawRain:false, sawStorm:false, sawNight:false, sawFog:false, gotTrash:false, gotLegend:false, quizTags:{}, parrotPet:false };
+      document.getElementById('score-box').textContent = '魚獲 0';
+      saveGameSave();
+      alert('存檔已清除');
+    };
+    document.getElementById('mute-btn').onclick = (e) => {
+      e.stopPropagation();
+      const on = AudioSys.toggleBgm();
+      document.getElementById('mute-btn').textContent = on ? '音樂' : '靜音';
+    };
+    document.getElementById('col-close-btn').onclick = () => closeCollection();
+    document.getElementById('collection-modal').onclick = (e) => { if (e.target.id === 'collection-modal') closeCollection(); };
+
+    function loop(now) {
+      const dt = Math.min(now - lastTime, 50);
+      lastTime = now;
+      dayTime = (dayTime + daySpeed * dt) % 1;
+      document.getElementById('time-box').textContent = getTimeLabel(dayTime);
+      if (getTimeLabel(dayTime) === '深夜' || getTimeLabel(dayTime) === '夜晚') {
+        if (!stats.sawNight) { stats.sawNight = true; saveStats(); checkAchievements(); }
+      }
+      cloudOffset += dt * (weather === 'storm' ? 0.035 : weather === 'rain' ? 0.02 : 0.01);
+      wavePhase += dt * (weather === 'storm' ? 0.006 : 0.0035);
+      birdPhase += dt * 0.002;
+      heartPhase += dt * 0.004;
+      updateParrot(dt);
+
+      // --- weather system (small chance) ---
+      weatherTimer -= dt;
+      weatherCooldown -= dt;
+      if (lightningFlash > 0) lightningFlash = Math.max(0, lightningFlash - dt * 0.004);
+      if (weather === 'clear' && weatherCooldown <= 0) {
+        const r = Math.random();
+        // ~3% storm, ~8% rain, ~4% fog
+        if (r < 0.03) {
+          weather = 'storm';
+          weatherTimer = 18000 + Math.random() * 22000;
+          rainDrops = [];
+          setStatus('雷暴來襲！');
+          AudioSys.startRain(true);
+          stats.sawStorm = true; saveStats(); checkAchievements();
+        } else if (r < 0.11) {
+          weather = 'rain';
+          weatherTimer = 20000 + Math.random() * 25000;
+          rainDrops = [];
+          setStatus('下雨了…');
+          AudioSys.startRain(false);
+          stats.sawRain = true; saveStats(); checkAchievements();
+        } else if (r < 0.15) {
+          weather = 'fog';
+          weatherTimer = 16000 + Math.random() * 20000;
+          setStatus('起霧了…');
+          stats.sawFog = true; saveStats(); checkAchievements();
+        }
+        weatherCooldown = 50000 + Math.random() * 70000;
+      } else if (weather !== 'clear' && weatherTimer <= 0) {
+        weather = 'clear';
+        rainDrops = [];
+        lightningFlash = 0;
+        AudioSys.stopRain();
+        setStatus(state === 'idle' ? '準備中' : document.getElementById('status-box').textContent);
+      }
+      // update rain positions
+      if (weather !== 'clear') {
+        rainDrops.forEach(d => {
+          d.y += d.spd;
+          d.x += d.drift * 0.4;
+          if (d.y > IH + 10) {
+            d.y = -10;
+            d.x = Math.random() * (IW + 40) - 20;
+          }
+        });
+        if (weather === 'storm' && Math.random() < 0.008) {
+          lightningFlash = 1;
+          screenShake = Math.max(screenShake, 0.35);
+          AudioSys.thunder();
+          try { if (navigator.vibrate) navigator.vibrate([30, 40, 20]); } catch (e) {}
+        }
+      }
+
+      if (state === 'casting') {
+        castProgress += dt / 900;
+        if (castProgress >= 1) { castProgress = 1; beginWaiting(); }
+      }
+      // 效能：連續慢幀時降載
+      if (dt > 50) perfScale = Math.max(0.5, perfScale - 0.05);
+      else if (dt < 22) perfScale = Math.min(1, perfScale + 0.02);
+
+      if (state === 'waiting') {
+        waitElapsed += dt;
+        bobberPhase += dt * 0.007;
+        // 進度條與狀態文字
+        const pct = Math.min(100, (waitElapsed / waitTime) * 100);
+        const bar = document.getElementById('wait-bar');
+        if (bar) bar.style.width = pct + '%';
+        const remain = Math.max(0, Math.ceil((waitTime - waitElapsed) / 1000));
+        if (waitElapsed > waitTime - nearWindow) {
+          nearFish = true;
+          if (Math.random() < 0.1) {
+            bubbles.push({ x: 240+Math.random()*20, y: 175+Math.random()*10, s: 2+Math.random()*2, life: 0, vy: -0.3-Math.random()*0.25 });
+          }
+          if (Math.random() < 0.02) AudioSys.waterLap();
+        }
+        bubbles.forEach(b => { b.y += b.vy; b.life += dt*0.0015; });
+        bubbles = bubbles.filter(b => b.life < 1);
+
+        // 時間到：進入「有動靜／可收竿」由玩家決定
+        if (!biteReady && waitElapsed >= waitTime) {
+          biteReady = true;
+          biteTimer = pendingBiteMs || 5000;
+          nearFish = true;
+          setStatus('有動靜！點擊收竿');
+          if (bar) { bar.style.width = '100%'; bar.classList.add('ready'); }
+          try { if (navigator.vibrate) navigator.vibrate(40); } catch (e) {}
+        }
+        if (biteReady) {
+          biteTimer -= dt;
+          const sec = Math.max(0, Math.ceil(biteTimer / 1000));
+          setStatus('有動靜！點擊收竿 ' + sec);
+          if (bar) {
+            bar.classList.add('ready');
+            bar.style.width = Math.max(0, (biteTimer / (pendingBiteMs || 5000)) * 100) + '%';
+          }
+          if (biteTimer <= 0) {
+            // 沒收竿 → 脫鉤／跑掉
+            biteReady = false;
+            currentLoot = pendingLoot || rollLoot();
+            pendingLoot = null;
+            const wb = document.getElementById('wait-bar-wrap');
+            if (wb) wb.classList.remove('show');
+            showEscapeResult();
+          }
+        } else if (nearFish) {
+          setStatus('有動靜…再等等');
+        } else {
+          setStatus('等待中 ' + remain + '秒');
+        }
+      }
+      if (state === 'pulling') {
+        const dur = Math.max(400, pullDurationMs || 1100);
+        pullProgress += dt / dur;
+        pullFxTimer += dt;
+        const isLeg = currentLoot && (currentLoot.type === 'nessie' || currentLoot.type === 'ruby');
+        const isHugeF = currentLoot && currentLoot.type === 'huge';
+        if (pullStruggle > 0) {
+          // 掙扎強度隨進度起伏（中段最猛）
+          const wave = Math.sin(pullProgress * Math.PI);
+          screenShake = (isLeg ? 0.75 : 0.5) + (isLeg ? 0.55 : 0.4) * wave + 0.15 * Math.sin(now * 0.03);
+          // 狀態文字階段
+          if (isLeg) {
+            const secLeft = Math.max(1, Math.ceil((1 - pullProgress) * dur / 1000));
+            if (pullProgress < 0.3) setStatus((currentLoot.type === 'nessie' ? '??? 猛然下潛！！ ' : '紅寶石眩光中… ') + secLeft + 's');
+            else if (pullProgress < 0.65) setStatus((currentLoot.type === 'nessie' ? '線快斷了！拉住！！ ' : '強光拉扯中！！ ') + secLeft + 's');
+            else setStatus((currentLoot.type === 'nessie' ? '最後一搏…！！ ' : '就要上岸了！！ ') + secLeft + 's');
+          } else if (isHugeF) {
+            const secLeft = Math.max(1, Math.ceil((1 - pullProgress) * dur / 1000));
+            setStatus('超大魚拉扯中！！ ' + secLeft + 's');
+          }
+          // 音效／震動節奏
+          const sfxRate = isLeg ? 0.07 : 0.04;
+          if (Math.random() < sfxRate) AudioSys.reel();
+          if (Math.random() < (isLeg ? 0.04 : 0.02)) AudioSys.splash(true);
+          if (Math.random() < (isLeg ? 0.05 : 0.025)) {
+            try { if (navigator.vibrate) navigator.vibrate(isLeg ? [30, 20, 40] : 25); } catch (e) {}
+          }
+          // 週期性大抖
+          if (isLeg && pullFxTimer > 900) {
+            pullFxTimer = 0;
+            screenShake = 1.4;
+            AudioSys.splash(true);
+            try { if (navigator.vibrate) navigator.vibrate([40, 30, 60]); } catch (e) {}
+          }
+        } else if (screenShake > 0) {
+          screenShake *= 0.9;
+        }
+        if (pullProgress >= 1) { pullProgress = 1; screenShake = isLeg ? 1.0 : 0.8; finishPull(); }
+      } else if (screenShake > 0) {
+        screenShake *= 0.85;
+        if (screenShake < 0.02) screenShake = 0;
+      }
+      draw(now);
+      requestAnimationFrame(loop);
+    }
+  </script>
+</body>
+</html>
